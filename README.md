@@ -2,6 +2,9 @@
 
 > **To start it, run one file:** `python run_ground_station.py` (after `pip install -r requirements.txt` and starting the kRPC server in KSP, see [Run it](#run-it)).
 
+> **Beta.** This is an early version: it works in real launches and static fires, but expect rough edges and changes.
+> **Using it in a video or live stream?** Please credit **astraspac2** and link this project if you can. Thank you!
+
 A telemetry overlay for Starship flights in Kerbal Space Program, in the style of the Starship webcasts, fed by [kRPC](https://krpc.github.io/krpc/).
 It is made for the Starship Expansion Project's Starship on Super Heavy, not for other rockets.
 It shows the countdown clock, a curved flight timeline, engine dots with a propellant ring, a 3D attitude dial with a

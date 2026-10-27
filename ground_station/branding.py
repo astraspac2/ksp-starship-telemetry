@@ -2,7 +2,8 @@
 
 APP_NAME = "KSP Starship Telemetry"
 APP_TAGLINE = "Starship-style telemetry overlay for Kerbal Space Program"
-PANEL_TITLE = f"{APP_NAME} - Mission Control"
+APP_STAGE = "BETA"  # shown in the control panel's title, not on the overlay that goes on stream
+PANEL_TITLE = f"{APP_NAME} ({APP_STAGE}) - Mission Control"
 SETTINGS_FOLDER = APP_NAME  # inside %APPDATA%
 LOCK_NAME = APP_NAME.lower().replace(" ", "-") + ".lock"
 KRPC_CLIENT_NAME = APP_NAME
