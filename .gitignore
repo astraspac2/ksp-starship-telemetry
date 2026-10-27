@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# generated pictures (the README uses the hand-picked ones in docs/)
+images/
+previews/
+
+# local settings and logs
+settings.json
+*.log

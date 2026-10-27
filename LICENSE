@@ -1,0 +1,33 @@
+KSP Starship Telemetry - Source-Available License
+
+Copyright (c) 2026 <YOUR NAME>. All rights reserved.
+
+You may:
+  1. Read the source code.
+  2. Download it and run it for yourself, for personal and non-commercial use,
+     including showing it on screen in streams, videos and recordings of your own
+     Kerbal Space Program play.
+
+You may NOT, without the author's written permission:
+  1. Copy, publish, upload or otherwise redistribute this software or any part of
+     it, in original or changed form (including as a fork, a mirror, a repackaged
+     download or a "new" project).
+  2. Sell it, rent it, or include it in anything you sell.
+  3. Present it, or a changed version of it, as your own work, or remove or change
+     this notice, the copyright line or the author's credit.
+  4. Use the name "KSP Starship Telemetry" for anything other than this software.
+
+If you show the overlay in a video or stream, a link back to this project is
+appreciated but not required.
+
+Third-party files in this repository (the D-DIN fonts, the Natural Earth map data)
+keep their own licenses; see THIRD_PARTY_NOTICES.md. Nothing here changes them.
+
+This software is provided "as is", without warranty of any kind. The author is not
+liable for any damage arising from its use.
+
+This project is a fan-made tool. It is not affiliated with, endorsed or sponsored by
+SpaceX, Squad, Private Division, Take-Two Interactive or the makers of kRPC or of any
+Kerbal Space Program mod. "Starship" is a trademark of Space Exploration Technologies
+Corp.; "Kerbal Space Program" and "KSP" belong to their owners. They are named here
+only to say what this software works with.
