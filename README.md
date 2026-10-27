@@ -72,6 +72,12 @@ The pill and bar are click-through, always-on-top windows for capture software o
 
 On the pad, KSP keeps mission time at 0, so the static-fire bar's clock runs on through T-0 instead of waiting for a launch.
 
+## Timeline accuracy
+
+The timeline is not always exact to the game: its events are the times you plan, and only stage separation, maneuver nodes and re-entry are picked up from the game itself.
+It is most accurate when a flight repeats: if a script flies it (for example a kOS script) and the events happen at almost the same time every launch, set your events to those times and the timeline will line up closely.
+Editing your kOS script so its events land at fixed times makes it even more accurate. Change the times in the **Mission & Timeline** tab.
+
 ## Status
 
 The launch bar, static-fire bar, engine dial (all four cluster modes), stage-separation detection, 3D dial, map and timeline have been used in real launches and a static fire. The maneuver-node prompt and the RE-ENTRY marker are tested with simulated data only and have not been flown yet.
