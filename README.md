@@ -3,6 +3,8 @@
 > **To start it, run one file:** `python run_ground_station.py` (after `pip install -r requirements.txt` and starting the kRPC server in KSP, see [Run it](#run-it)).
 
 > **Beta.** This is an early version: it works in real launches and static fires, but expect rough edges and changes.
+>
+> **Made with Claude, vibe coded.** This was built by directing Claude (Anthropic's AI assistant) and tested in the game by the author, so expect it to behave like that kind of project.
 > **Using it in a video or live stream?** Please credit **astraspac2** and link this project if you can. Thank you!
 >
 > **Found a problem?** Join the Discord to report it: <https://discord.gg/kvCDvAHWtm>, then either DM Astra or mention him in the general channel.
