@@ -1,6 +1,7 @@
 # KSP Starship Telemetry
 
-A Starship-webcast-style telemetry overlay for Kerbal Space Program, fed by [kRPC](https://krpc.github.io/krpc/).
+A telemetry overlay for Starship flights in Kerbal Space Program, in the style of the Starship webcasts, fed by [kRPC](https://krpc.github.io/krpc/).
+It is made for the Starship Expansion Project's Starship on Super Heavy, not for other rockets.
 It shows the countdown clock, a curved flight timeline, engine dots with a propellant ring, a 3D attitude dial with a
 Starship on its booster, speed and altitude, and a map, in the same arrangement as the real broadcasts. A control panel
 for a second monitor runs it. **It only reads from the game: nothing here sends a flight command.**
@@ -36,7 +37,7 @@ The small static-fire bar (mock data):
 | Mod | Needed for | Notes |
 |---|---|---|
 | [kRPC](https://krpc.github.io/krpc/) 0.6.0 | everything | The data comes from its server. Start the server in KSP. The Python package in `requirements.txt` must match (`krpc==0.6.0`). |
-| [Starship Expansion Project](https://github.com/Kari1407/Starship-Expansion-Project/releases) (SEP) 3.1.0 | the 33-engine booster dial and the thrust gauge | Only for the SEP Super Heavy booster, whose engine cluster is one part with a mode switch. Other rockets work too, with the dial showing their own engines. |
+| [Starship Expansion Project](https://github.com/Kari1407/Starship-Expansion-Project/releases) (SEP) 3.1.0 | the Starship and Super Heavy it is built for | This tool is made for the SEP Starship on its Super Heavy booster (33 engines, one cluster part with a mode switch). It is not made for other rockets. |
 
 SEP's own required mods, from its CKAN file: ModuleManager, CommunityResourcePack, B9PartSwitch, Waterfall,
 KSPCommunityPartModules, KSPCommunityFixes, Harmony 2 and Shabby. It recommends KerbalJointReinforcementContinued,
