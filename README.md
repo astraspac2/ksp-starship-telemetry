@@ -31,9 +31,25 @@ The small static-fire bar (mock data):
 ## Requirements
 
 - Windows (the only system it has been run on), Python 3.11 or newer.
-- Kerbal Space Program with the **kRPC** server mod (0.6.0) installed and started.
-- For the 33-engine booster dial and thrust: the Starship Expansion Project (SEP) booster, whose engine cluster is a
-  single part with a mode switch. Other rockets work, with the dial showing their engines.
+- Kerbal Space Program 1.12.x.
+
+### KSP mods you need
+
+| Mod | Needed for | Notes |
+|---|---|---|
+| [kRPC](https://krpc.github.io/krpc/) 0.6.0 | everything | The data comes from its server. Start the server in KSP. The Python package in `requirements.txt` must match (`krpc==0.6.0`). |
+| [Starship Expansion Project](https://github.com/Kari1407/Starship-Expansion-Project/releases) (SEP) 3.1.0 | the 33-engine booster dial and the thrust gauge | Only for the SEP Super Heavy booster, whose engine cluster is one part with a mode switch. Other rockets work too, with the dial showing their own engines. |
+
+SEP's own required mods, from its CKAN file: ModuleManager, CommunityResourcePack, B9PartSwitch, Waterfall,
+KSPCommunityPartModules, KSPCommunityFixes, Harmony 2 and Shabby. It recommends KerbalJointReinforcementContinued,
+FlyByWireSASMode and MechJeb2.
+
+Two more things that depend on your setup:
+
+- **The map assumes Earth.** It draws your latitude and longitude on a map of Earth, so use a real-scale Earth planet pack
+  (the author does). On the stock Kerbin the position would be meaningless, so leave the map off there.
+- **The author's launch site and vessel** also use Starship Launch Expansion (tower and catching arms), Conformal Decals and a
+  Starlink payload pack. The app does not need any of them.
 
 ## Run it
 
