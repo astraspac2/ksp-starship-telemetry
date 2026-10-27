@@ -82,6 +82,8 @@ Editing your kOS script so its events land at fixed times makes it even more acc
 
 The launch bar, static-fire bar, engine dial (all four cluster modes), stage-separation detection, 3D dial, map and timeline have been used in real launches and a static fire. The maneuver-node prompt and the RE-ENTRY marker are tested with simulated data only and have not been flown yet.
 
+**Not made yet:** the booster's boostback burn and landing. After stage separation the overlay follows the ship only.
+
 Other scripts: `run_bar_demo.py` and `run_pill_demo.py` (the bar or pill alone with mock data), `run_live.py` (a bare runner without the panel), `render_previews.py` and `render_sequences.py` (pictures of every view), and `python -m pytest` for the tests.
 
 ## License and credits
