@@ -22,8 +22,6 @@ for a second monitor runs it. **It only reads from the game: nothing here sends 
 - **Map.** A black-and-white Earth with your position, instead of the engine dial (key `M`).
 - **Honest data.** Mock data is always labelled MOCK, and a lost or stale feed says so instead of showing old numbers.
 
-![The 3D dial while the stack separates](docs/dial-stage-separation.png)
-
 The small static-fire bar (mock data):
 
 ![Static-fire bar](docs/static-fire-bar.png)
