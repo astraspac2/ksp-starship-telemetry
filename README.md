@@ -4,6 +4,8 @@
 
 > **Beta.** This is an early version: it works in real launches and static fires, but expect rough edges and changes.
 > **Using it in a video or live stream?** Please credit **astraspac2** and link this project if you can. Thank you!
+>
+> **Found a problem?** Join the Discord to report it: <https://discord.gg/kvCDvAHWtm>. Please don't DM Astra or mention him in the general channel.
 
 A telemetry overlay for Starship flights in Kerbal Space Program, in the style of the Starship webcasts, fed by [kRPC](https://krpc.github.io/krpc/).
 It is made for the Starship Expansion Project's Starship on Super Heavy, not for other rockets.
