@@ -11,8 +11,8 @@ python run_ground_station.py
 
 (Start the kRPC server in KSP first. Full steps in [Quick start](#quick-start).)
 
-> **Beta, made with Claude.** Early version, built by directing Claude (Anthropic's AI assistant) and tested in the game by the author: it works in real launches and static fires, but expect rough edges.
-> **Using it in a video or live stream?** Please credit **astraspac2** and link this project if you can.
+> **Beta, made with Claude.** Early version, built by directing Claude (Anthropic's AI assistant) and tested in the game by the author: it works in real launches and static fires, but expect rough edges.<br>
+> **Using it in a video or live stream?** Please credit **astraspac2** and link this project if you can.<br>
 > **Found a problem?** Join the Discord <https://discord.gg/kvCDvAHWtm>, then DM Astra or mention him in the general channel.
 
 ![Flight bar after stage separation](docs/flight-bar-after-separation.png)
