@@ -1,5 +1,7 @@
 # KSP Starship Telemetry
 
+> **To start it, run one file:** `python run_ground_station.py` (after `pip install -r requirements.txt` and starting the kRPC server in KSP, see [Run it](#run-it)).
+
 A telemetry overlay for Starship flights in Kerbal Space Program, in the style of the Starship webcasts, fed by [kRPC](https://krpc.github.io/krpc/).
 It is made for the Starship Expansion Project's Starship on Super Heavy, not for other rockets.
 It shows the countdown clock, a curved flight timeline, engine dots with a propellant ring, a 3D attitude dial with a
@@ -38,17 +40,16 @@ The small static-fire bar (mock data):
 |---|---|---|
 | [kRPC](https://krpc.github.io/krpc/) 0.6.0 | everything | The data comes from its server. Start the server in KSP. The Python package in `requirements.txt` must match (`krpc==0.6.0`). |
 | [Starship Expansion Project](https://github.com/Kari1407/Starship-Expansion-Project/releases) (SEP) 3.1.0 | the Starship and Super Heavy it is built for | This tool is made for the SEP Starship on its Super Heavy booster (33 engines, one cluster part with a mode switch). It is not made for other rockets. |
+| [Starship Launch Expansion](https://forum.kerbalspaceprogram.com/index.php?/topic/203952-1122-starship-launch-expansion/) (SLE) | the launch tower and catching arms | The pad the Starship stands on. |
+| Conformal Decals | the vessel's decals | Used by the Starship craft the overlay was built around. |
+| Starlink payload pack | the Starlink satellites in the ship | Used by that same craft. |
 
 SEP's own required mods, from its CKAN file: ModuleManager, CommunityResourcePack, B9PartSwitch, Waterfall,
 KSPCommunityPartModules, KSPCommunityFixes, Harmony 2 and Shabby. It recommends KerbalJointReinforcementContinued,
 FlyByWireSASMode and MechJeb2.
 
-Two more things that depend on your setup:
-
-- **The map assumes Earth.** It draws your latitude and longitude on a map of Earth, so use a real-scale Earth planet pack
-  (the author does). On the stock Kerbin the position would be meaningless, so leave the map off there.
-- **The author's launch site and vessel** also use Starship Launch Expansion (tower and catching arms), Conformal Decals and a
-  Starlink payload pack. The app does not need any of them.
+The map assumes Earth. It draws your latitude and longitude on a map of Earth, so use a real-scale Earth planet pack
+(the author does). On the stock Kerbin the position would be meaningless, so leave the map off there.
 
 ## Run it
 
