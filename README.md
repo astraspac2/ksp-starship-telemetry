@@ -34,6 +34,11 @@ The small static-fire bar (mock data):
 - Windows (the only system it has been run on), Python 3.11 or newer.
 - Kerbal Space Program 1.12.x.
 
+### The craft provided
+
+Use the craft in this repository: [`craft/Starship V3.craft`](craft/Starship%20V3.craft). The overlay was built and tested with it,
+so it should work best. Copy it into `Ships/VAB` in your KSP save folder (for example `saves/<your save>/Ships/VAB/`) and open it in the VAB.
+
 ### KSP mods you need
 
 | Mod | Needed for | Notes |
@@ -41,8 +46,7 @@ The small static-fire bar (mock data):
 | [kRPC](https://krpc.github.io/krpc/) 0.6.0 | everything | The data comes from its server. Start the server in KSP. The Python package in `requirements.txt` must match (`krpc==0.6.0`). |
 | [Starship Expansion Project](https://github.com/Kari1407/Starship-Expansion-Project/releases) (SEP) 3.1.0 | the Starship and Super Heavy it is built for | This tool is made for the SEP Starship on its Super Heavy booster (33 engines, one cluster part with a mode switch). It is not made for other rockets. |
 | [Starship Launch Expansion](https://forum.kerbalspaceprogram.com/index.php?/topic/203952-1122-starship-launch-expansion/) (SLE) | the launch tower and catching arms | The pad the Starship stands on. |
-| Conformal Decals | the vessel's decals | Used by the Starship craft the overlay was built around. |
-| Starlink payload pack | the Starlink satellites in the ship | Used by that same craft. |
+| [Starship Pad Modernization](https://spacedock.info/mod/3924/Starship%20Pad%20Modernization) | the launch pad (Pad-B/2) | The pad the provided craft stands on. It needs B9PartSwitch and ModuleManager (both already in SEP's list) and recommends Vessel Mover, KKStatics and Hangar Extender. |
 
 SEP's own required mods, from its CKAN file: ModuleManager, CommunityResourcePack, B9PartSwitch, Waterfall,
 KSPCommunityPartModules, KSPCommunityFixes, Harmony 2 and Shabby. It recommends KerbalJointReinforcementContinued,
