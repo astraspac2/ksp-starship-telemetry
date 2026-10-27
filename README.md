@@ -22,18 +22,11 @@ for a second monitor runs it. **It only reads from the game: nothing here sends 
 - **Map.** A black-and-white Earth with your position, instead of the engine dial (key `M`).
 - **Honest data.** Mock data is always labelled MOCK, and a lost or stale feed says so instead of showing old numbers.
 
-| | |
-|---|---|
-| ![Stage separation](docs/flight-bar-stage-separation.png) | ![Curved timeline](docs/flight-bar-curved-timeline.png) |
-| ![Map](docs/flight-bar-map.png) | ![Climb](docs/flight-bar-climb.png) |
-
 ![The 3D dial while the stack separates](docs/dial-stage-separation.png)
 
-The small static-fire bar through a made-up burn (mock data):
+The small static-fire bar (mock data):
 
 ![Static-fire bar](docs/static-fire-bar.png)
-
-![Static fire, second by second](docs/static-fire-sequence.png)
 
 ## Requirements
 
@@ -67,8 +60,6 @@ window. Untick click-through on the HUD tab to drag them. Settings are saved in
 | Markers tab | stamp a typed note at the current time |
 | HUD tab, 3D model | use your own `.glb`, `.gltf`, `.obj` or `.stl` rocket instead of the built-in Starship |
 | Broadcast lock | locks every setting during a stream |
-
-![Control panel](docs/control-panel-mission.png)
 
 ## Other scripts
 
