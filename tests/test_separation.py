@@ -59,3 +59,29 @@ def test_it_is_remembered_and_reset_clears_it():
     assert detector.separated_at == 78
     detector.reset()
     assert detector.separated_at is None
+
+
+def test_starting_the_app_after_the_staging_takes_the_ship_alone_as_already_separated():
+    wall = Wall()
+    detector = SeparationDetector(wall)
+    seen = feed(detector, wall, [(540.0, 6, 0.1)])  # the first thing it ever sees, nine minutes in, is the ship's six engines
+    assert seen == 480.0  # taken as a minute ago, so the display shows the finished separation
+    assert feed(detector, wall, [(541.0, 6, 0.1), (542.0, 6, 0.1)]) == 480.0  # and stays that way
+
+
+def test_the_ship_count_on_the_pad_or_after_a_booster_count_is_not_an_early_separation():
+    wall = Wall()
+    detector = SeparationDetector(wall)
+    assert feed(detector, wall, [(-30.0, 6, 0.1), (5.0, 6, 0.1), (6.0, 6, 0.1)]) is None  # a ship-only vehicle on the pad
+    detector.reset()
+    assert feed(detector, wall, [(10.0, 33, 0.1), (11.0, 33, 0.1)]) is None  # the booster count at the start is the baseline
+    detector.reset()
+    assert feed(detector, wall, [(0.0, 6, 0.1)]) is None  # exactly at liftoff is not "after"
+
+
+def test_it_is_remembered_after_a_mid_flight_start_until_reset():
+    wall = Wall()
+    detector = SeparationDetector(wall)
+    feed(detector, wall, [(540.0, 6, 0.1)])
+    detector.reset()
+    assert detector.separated_at is None

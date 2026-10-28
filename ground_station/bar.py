@@ -17,6 +17,7 @@ from .countdown import format_clock
 from .earth_map import MapRenderer
 from .gauges import draw_attitude_dial, draw_engine_cluster, draw_map_dial, draw_value_gauge, rocket_pixels
 from .hud_window import HudWindow
+from .separation import UPPER_STAGE_ENGINES  # the ship's engines, drawn dark until it is the stage that is flying
 from .layout import BoosterMemory, Layout, fade_progress, layout_for, stage_sep_time, staged
 from .mesh import ModelError, builtin_rocket, load_mesh, normalize
 from .starship_model import starship_stack
@@ -84,7 +85,6 @@ ATTITUDE_REDRAW_DELTA = 0.0015  # about a tenth of a degree
 DOT_FADE_SECONDS = 0.12  # an engine dot closes about two thirds of the way to lit or dim in this long
 SEPARATION_ANIMATION_SECONDS = 4.0  # the dial's booster drops away and the ship fills it over this long
 BOOSTER_ENGINES = 33  # the booster's dots, drawn dark once it has separated
-UPPER_STAGE_ENGINES = 6  # the ship's engines, drawn dark until it is the stage that is flying
 # What sits at each position (centre x) in each arrangement. Where the element at a position changes, the old one fades
 # out and the new one fades in (an engine cluster also draws itself in); elements that stay put are left alone.
 ELEMENTS = {
