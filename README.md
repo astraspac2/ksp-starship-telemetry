@@ -1,5 +1,7 @@
 # KSP Starship Telemetry
 
+**Need help or want to ask a question?** Join the Discord at https://discord.gg/kvCDvAHWtm and either DM Astra or mention him in the general channel.
+
 A Starship-webcast-style telemetry overlay for Kerbal Space Program, made for the **Starship Expansion Project** Starship on its Super Heavy booster. It only reads from the game through [kRPC](https://krpc.github.io/krpc/): nothing here sends a flight command.
 
 **To start it, run this one file:**
