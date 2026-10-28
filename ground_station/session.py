@@ -7,7 +7,7 @@ import time
 from dataclasses import replace
 from typing import Callable
 
-from .auto_markers import AutoMarker, AutoMarkerTracker, NodeProposal, auto_markers_from_dicts, auto_markers_to_dicts
+from .auto_markers import LATE_MARKER_KINDS, LATE_MARKER_VISIBLE_FROM, AutoMarker, AutoMarkerTracker, NodeProposal, auto_markers_from_dicts, auto_markers_to_dicts
 from .clock import ClockState, CountdownClock
 from .events import Event, events_from_dicts, events_to_dicts
 from .krpc_source import ConnState, KrpcReader, ReaderStatus
@@ -290,7 +290,16 @@ class Session:
     def milestones(self) -> list[Milestone]:
         """Enabled planned events, automatic markers and manual markers, in time order, for the bar's timeline."""
         planned = [Milestone(e.label.upper(), e.time) for e in self.events if e.enabled]
-        automatic = [] if self.pad_mode else [Milestone(m.name.upper(), m.time) for m in self.auto_markers if m.enabled]
+        late = self.t < LATE_MARKER_VISIBLE_FROM  # re-entry and landing burn would only crowd the bar during the launch
+        automatic = (
+            []
+            if self.pad_mode
+            else [
+                Milestone(m.name.upper(), m.time)
+                for m in self.auto_markers
+                if m.enabled and not (late and m.kind in LATE_MARKER_KINDS)
+            ]
+        )
         return sorted(planned + automatic + self.markers, key=lambda m: m.time)
 
     def shutdown(self) -> None:

@@ -9,9 +9,12 @@ Two kinds:
            placed at the predicted moment, and when 70 km is really crossed on the way down it is set to that moment.
 
   landing  LANDING BURN, when the vessel coming down passes 800 m (above the ground, or above sea level if that is the chosen
-           altitude). It only works after the vessel has been above 10 km. Once it is falling through the last
+           altitude). Like re-entry it only works after the vessel has been above 70 km. Once it is falling through the last
            stretch the marker is placed at the predicted moment from how fast it is sinking, and when 800 m is really
            crossed it is set to that moment.
+
+The re-entry and landing markers are kept off the timeline until the flight clock reaches T+00:10:00 (see
+LATE_MARKER_VISIBLE_FROM), so they do not sit on the bar during the launch.
 
 Nothing here sends anything to the game.
 """
@@ -28,8 +31,11 @@ REENTRY_ALTITUDE_KM = 70.0  # the marker arms once the vessel is above this, and
 REENTRY_NAME = "Re-entry"
 REENTRY_MOVED_SECONDS = 0.5
 
+LATE_MARKER_KINDS = ("reentry", "landing")
+LATE_MARKER_VISIBLE_FROM = 600.0  # these two stay off the timeline until the flight clock reaches T+00:10:00
+
 LANDING_BURN_ALTITUDE_M = 800.0  # Starship lights its engines for the landing burn at about this height
-LANDING_ARM_KM = 10.0  # the marker arms once the vessel has been above this
+LANDING_ARM_KM = REENTRY_ALTITUDE_KM  # arms like the re-entry marker: only flights that got above 70 km
 LANDING_PREDICT_KM = 10.0  # the sink rate is only trusted for a prediction below this
 LANDING_NAME = "Landing burn"
 LANDING_MOVED_SECONDS = 0.5

@@ -1,5 +1,6 @@
 import pytest
 
+from ground_station.auto_markers import LANDING, NODE, REENTRY, AutoMarker
 from ground_station.clock import ClockState
 from ground_station.krpc_source import ConnState, LiveSample, ReaderStatus
 from ground_station.session import Session
@@ -409,3 +410,18 @@ def test_jumping_leaves_the_detected_separation_alone():
     FakeReader.instances[0].status = _flying(5000.0, 455.0)
     session.jump_to_mission_time()
     assert session.separation.separated_at == 104.0
+
+
+def test_reentry_and_landing_markers_only_show_on_the_timeline_from_ten_minutes_in():
+    session, reader, wall = watching_session()
+    session.auto_markers.extend(
+        [AutoMarker("Re-entry", 900.0, REENTRY), AutoMarker("Landing burn", 1000.0, LANDING), AutoMarker("Burn", 700.0, NODE)]
+    )
+
+    def shown():
+        return [m.name for m in session.milestones() if m.name in ("RE-ENTRY", "LANDING BURN", "BURN")]
+
+    session.t = 599.0
+    assert shown() == ["BURN"]
+    session.t = 600.0
+    assert shown() == ["BURN", "RE-ENTRY", "LANDING BURN"]
