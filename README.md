@@ -42,7 +42,7 @@ Needs Windows (the only system it has been run on), Python 3.11+ and KSP 1.12.x.
 
 | Mod | Why |
 |---|---|
-| [kRPC **0.6.0 (exactly this version)**](https://github.com/krpc/krpc/releases/tag/v0.6.0) | The data comes from it. Download `krpc-0.6.0.zip`. **Do not use the latest release (0.7.0 or newer):** this app was built and tested with 0.6.0, and `requirements.txt` pins the matching Python package, so another version fails to connect. |
+| [kRPC **0.6.0 (exactly this version)**](https://github.com/krpc/krpc/releases/tag/v0.6.0) | The data comes from it. Download `krpc-0.6.0.zip` from the link. **It does not work with newer versions yet:** the latest release (0.7.0) fails to connect, so use this older one. `requirements.txt` pins the matching Python package. |
 | [Starship Expansion Project](https://github.com/Kari1407/Starship-Expansion-Project/releases) 3.1.0 | The Starship and Super Heavy this is made for (not for other rockets). |
 | [Starship Launch Expansion](https://forum.kerbalspaceprogram.com/index.php?/topic/203952-1122-starship-launch-expansion/) | The tower and catching arms. |
 | [Starship Pad Modernization](https://spacedock.info/mod/3924/Starship%20Pad%20Modernization) | The Pad-B/2 launch pad. Needs B9PartSwitch and ModuleManager; recommends Vessel Mover, KKStatics and Hangar Extender. |
