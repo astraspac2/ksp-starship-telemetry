@@ -63,27 +63,37 @@ from .units import (
 
 STYLE_TEMPLATE = """
 QWidget { background: @bg@; color: @text@; font-family: 'D-DIN', 'Segoe UI'; font-size: 13px; }
+QLabel { background: transparent; }
 QMainWindow { background: @bg@; }
 QMenuBar, QStatusBar { background: @bar_bg@; }
 QMenuBar::item:selected, QMenu::item:selected { background: @hover@; }
 QMenu { background: @panel@; border: 1px solid @border@; }
 QScrollArea { border: none; }
-QGroupBox { border: 1px solid @border@; border-radius: 6px; margin-top: 12px; padding: 10px 8px 8px 8px; background: @group_bg@; }
-QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; color: @title@; }
+QGroupBox { border: 1px solid @border@; border-radius: 8px; margin-top: 14px; padding: 14px 10px 10px 10px; background: @group_bg@; }
+QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; color: @accent@; font-weight: bold; }
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QListWidget, QTableWidget { background: @panel@; border: 1px solid @border@; border-radius: 3px; padding: 3px 5px; }
 QComboBox QAbstractItemView { background: @panel@; selection-background-color: @hover@; }
 QTableWidget { gridline-color: @grid@; alternate-background-color: @panel_alt@; }
 QHeaderView::section { background: @panel@; color: @title@; border: none; border-bottom: 1px solid @border@; padding: 6px; }
-QPushButton, QToolButton { background: @button@; border: 1px solid @button_border@; border-radius: 3px; padding: 5px 14px; }
-QPushButton:hover, QToolButton:hover { background: @hover@; }
+QPushButton, QToolButton { background: @button@; border: 1px solid @button_border@; border-radius: 4px; padding: 6px 16px; }
+QPushButton:hover, QToolButton:hover { background: @hover@; border-color: @accent@; }
+QPushButton#primary { background: @accent@; color: #04101a; border-color: @accent@; font-weight: bold; }
+QPushButton#primary:hover { background: @text@; }
+QPushButton#primary:disabled { color: @disabled@; background: @bar_bg@; border-color: @grid@; }
 QPushButton:disabled { color: @disabled@; background: @bar_bg@; border-color: @grid@; }
 QToolButton:checked { border: 2px solid @accent@; background: @hover@; }
 QPushButton#abort { background: #7a1620; border-color: #b4323f; color: #fff; font-weight: bold; }
 QPushButton#abort:hover { background: #961c28; }
 QPushButton#abort:disabled { background: #2a1519; border-color: #3a2226; color: #6a5558; }
-QTabWidget::pane { border: 1px solid @border@; top: -1px; background: @pane_bg@; }
-QTabBar::tab { background: @panel@; padding: 8px 18px; border: 1px solid @border@; border-bottom: none; }
-QTabBar::tab:selected { background: @button@; color: @accent@; }
+QTabWidget::pane { border: none; border-top: 1px solid @border@; background: @pane_bg@; }
+QTabBar::tab { background: transparent; color: @title@; padding: 10px 24px; border: none; border-bottom: 3px solid transparent; font-size: 14px; }
+QTabBar::tab:hover { color: @text@; }
+QTabBar::tab:selected { color: @accent@; border-bottom: 3px solid @accent@; font-weight: bold; }
+QFrame#header { border: 1px solid @border@; border-radius: 10px; background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 @header_a@, stop:1 @header_b@); }
+QFrame#tile { border: 1px solid @border@; border-radius: 8px; background: @panel@; }
+QLabel#tileCaption { color: @title@; font-size: 11px; font-weight: bold; }
+QLabel#tileValue { font-size: 28px; font-weight: bold; }
+QLabel#hint { color: @title@; }
 QSlider::groove:horizontal { height: 4px; background: @border@; border-radius: 2px; }
 QSlider::handle:horizontal { background: @accent@; width: 14px; margin: -6px 0; border-radius: 7px; }
 QSlider::sub-page:horizontal { background: @accent@; border-radius: 2px; }
@@ -100,12 +110,14 @@ PALETTES = {
         "bg": "#121a23", "bar_bg": "#0e151d", "text": "#d8e0e8", "border": "#2a3b4e", "panel": "#0f1822",
         "panel_alt": "#111c28", "title": "#8fa3b5", "button": "#172433", "button_border": "#34506b", "hover": "#20344a",
         "accent": "#6cc0ff", "grid": "#1d2a38", "disabled": "#566878", "group_bg": "transparent", "pane_bg": "transparent",
+        "header_a": "#1a2a3c", "header_b": "#0f1822",
     },
     "forest": {
         "bg": "transparent", "bar_bg": "rgba(3,14,9,215)", "text": "#e6f3e7", "border": "#2f6a4a", "panel": "rgba(4,22,13,210)",
         "panel_alt": "rgba(8,32,19,210)", "title": "#a9d8ae", "button": "rgba(14,52,32,225)", "button_border": "#3f8f62",
         "hover": "rgba(28,88,54,235)", "accent": "#8fd694", "grid": "#1d4a33", "disabled": "#5f8a6c",
         "group_bg": "rgba(3,16,10,150)", "pane_bg": "rgba(3,14,9,120)",
+        "header_a": "rgba(14,52,32,225)", "header_b": "rgba(3,16,10,200)",
     },
 }
 PANEL_THEME_LABELS = {"aerospace": "Aerospace dark", "forest": "Forest at dusk"}
@@ -120,6 +132,7 @@ def build_style(panel_theme: str) -> str:
 
 
 GREEN, AMBER, RED, GREY = "#3ddc84", "#ffb030", "#ff5148", "#6b7a88"
+CHIP = "color: #0b121a; font-weight: bold; padding: 2px 10px; border-radius: 10px;"  # a small coloured label
 WARP_LABELS = ["Follow game time through time warp (default)", "Hold the countdown during time warp"]
 ALTITUDE_MODE_LABELS = {
     "surface": "Surface altitude (above ground/sea, whichever is closer)",
@@ -143,6 +156,7 @@ EVENTS_TITLES = {
     "flight": "Timeline events - times are relative to T-0 (T- before liftoff, T+ after)",
     "pad": "Pad / static-fire events - times are relative to T-0 (the ignition command), T+ after it",
 }
+TILE_NAMES = ("SPEED", "ALTITUDE", "FUEL", "ENGINES")  # the header's live readout tiles
 THUMB_WIDTH = 440  # two look cards side by side must fit the narrowest panel window
 
 
@@ -181,9 +195,7 @@ class ControlPanel(QMainWindow):
         self._tabs.addTab(scrolling(self._build_mission_tab()), "Mission && Timeline")
         self._tabs.addTab(scrolling(self._build_hud_tab()), "HUD")
         self._tabs.addTab(scrolling(self._build_data_tab()), "Data && Test")
-        self._tabs.addTab(scrolling(self._build_appearance_tab()), "Appearance")
-        self._tabs.addTab(scrolling(self._build_panel_look_tab()), "Panel look")
-        self._tabs.addTab(scrolling(self._build_markers_tab()), "Markers")
+        self._tabs.addTab(scrolling(self._build_appearance_tab()), "Looks")  # the bar's look, then this window's
         root.addWidget(self._tabs, 1)
         self.setCentralWidget(central)
         self._build_menu()
@@ -236,25 +248,33 @@ class ControlPanel(QMainWindow):
         self._view_menu.addAction(self._map_action)
         self._view_menu.addAction(self._pad_action)
 
-    # countdown header
-    def _build_countdown_box(self) -> QGroupBox:
-        box = QGroupBox("Countdown")
+    # header: the countdown and the live numbers
+    def _build_countdown_box(self) -> QFrame:
+        box = QFrame()
+        box.setObjectName("header")
         layout = QHBoxLayout(box)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(18)
+
         left = QVBoxLayout()
         top = QHBoxLayout()
         self._clock_readout = QLabel("")
-        self._clock_readout.setStyleSheet("font-size: 34px; font-weight: bold;")
+        self._clock_readout.setStyleSheet("font-size: 46px; font-weight: bold;")
         self._state_label = QLabel("")
         top.addWidget(self._clock_readout)
-        top.addWidget(self._state_label)
+        top.addWidget(self._state_label, 0, Qt.AlignVCenter)
         top.addStretch(1)
         left.addLayout(top)
-        self._source_label = QLabel("")
-        left.addWidget(self._source_label)
-        self._readout = QLabel("")  # live numbers, so the panel shows the flight as well as the controls
-        left.addWidget(self._readout)
+        chips = QHBoxLayout()
+        self._source_label = QLabel("")  # says MOCK DATA or KSP LIVE, so the data's origin is always in view
+        self._mode_label = QLabel("")
+        chips.addWidget(self._source_label)
+        chips.addWidget(self._mode_label)
+        chips.addStretch(1)
+        left.addLayout(chips)
         row = QHBoxLayout()
         self._start_button = QPushButton("Start")
+        self._start_button.setObjectName("primary")
         self._hold_button = QPushButton("Hold")
         self._resume_button = QPushButton("Resume")
         self._reset_button = QPushButton("Reset")
@@ -262,7 +282,26 @@ class ControlPanel(QMainWindow):
             row.addWidget(button)
         row.addStretch(1)
         left.addLayout(row)
-        layout.addLayout(left, 1)
+        layout.addLayout(left, 3)
+
+        tiles = QGridLayout()  # live numbers, so the panel shows the flight as well as the controls
+        tiles.setSpacing(10)
+        self._tile_captions: dict[str, QLabel] = {}
+        self._tile_values: dict[str, QLabel] = {}
+        for index, name in enumerate(TILE_NAMES):
+            tile = QFrame()
+            tile.setObjectName("tile")
+            column = QVBoxLayout(tile)
+            column.setContentsMargins(12, 8, 12, 8)
+            column.setSpacing(0)
+            caption, value = QLabel(name), QLabel("—")
+            caption.setObjectName("tileCaption")
+            value.setObjectName("tileValue")
+            column.addWidget(caption)
+            column.addWidget(value)
+            self._tile_captions[name], self._tile_values[name] = caption, value
+            tiles.addWidget(tile, index // 2, index % 2)
+        layout.addLayout(tiles, 3)
 
         right = QVBoxLayout()
         self._lock = QCheckBox("BROADCAST LOCK")
@@ -275,7 +314,7 @@ class ControlPanel(QMainWindow):
         right.addWidget(self._lock, 0, Qt.AlignRight)
         right.addStretch(1)
         right.addWidget(self._abort_button)
-        layout.addLayout(right)
+        layout.addLayout(right, 1)
 
         self._start_button.clicked.connect(self._session.start_countdown)
         self._hold_button.clicked.connect(self._session.hold_countdown)
@@ -373,6 +412,9 @@ class ControlPanel(QMainWindow):
         halves.addWidget(box, 1)
         halves.addWidget(auto_box, 1)
         layout.addLayout(halves, 1)
+        notes = QGroupBox("Manual notes - typed markers that show on the timeline as squares at the current time")
+        QVBoxLayout(notes).addWidget(self._build_markers_tab())
+        layout.addWidget(notes)
         return page
 
     def _build_hud_tab(self) -> QWidget:
@@ -631,12 +673,14 @@ class ControlPanel(QMainWindow):
         reset.clicked.connect(lambda: self._set_accent(""))
         swatch_row.addWidget(reset)
         layout.addWidget(swatches)
+        layout.addWidget(self._build_panel_look_tab())
         layout.addStretch(1)
         return page
 
     def _build_panel_look_tab(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
         box = QGroupBox("This control panel's look")
         form = QFormLayout(box)
         self._panel_theme = QComboBox()
@@ -650,15 +694,12 @@ class ControlPanel(QMainWindow):
         note.setWordWrap(True)
         form.addRow(note)
         layout.addWidget(box)
-        layout.addStretch(1)
         return page
 
     def _build_markers_tab(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        note = QLabel("Markers you type here are manual notes. They show on the timeline as squares at the current time.")
-        note.setWordWrap(True)
-        layout.addWidget(note)
+        layout.setContentsMargins(0, 0, 0, 0)
         row = QHBoxLayout()
         self._marker_text = QLineEdit()
         self._marker_text.setPlaceholderText("Marker text, e.g. clamp release")
@@ -669,7 +710,7 @@ class ControlPanel(QMainWindow):
         row.addWidget(add)
         layout.addLayout(row)
         self._marker_list = QListWidget()
-        self._marker_list.setMinimumHeight(220)
+        self._marker_list.setMinimumHeight(110)
         layout.addWidget(self._marker_list, 1)
         remove = QPushButton("Remove selected")
         remove.clicked.connect(self._remove_marker)
@@ -1121,9 +1162,15 @@ class ControlPanel(QMainWindow):
         self._state_label.setText(name)
         palette = PALETTES[session.settings.panel_theme]
         colour = {ClockState.ABORTED: RED, ClockState.HELD: AMBER}.get(state, palette["accent"] if name != "STANDBY" else GREY)
-        self._state_label.setStyleSheet(f"font-size: 16px; font-weight: bold; padding-top: 12px; color: {colour};")
+        self._state_label.setStyleSheet(f"{CHIP} font-size: 14px; background: {colour};")
         self._source_label.setText(self._source_summary())
-        self._readout.setText(self._readout_text())
+        light, _text = self._connection_summary()
+        self._source_label.setStyleSheet(f"{CHIP} background: {AMBER if not live else light};")
+        self._mode_label.setText("PAD BAR" if session.settings.view_mode == "pad" else "FLIGHT BAR")
+        self._mode_label.setStyleSheet(f"{CHIP} background: {palette['accent']};")
+        for name, caption, value in self._readout_tiles():
+            self._tile_captions[name].setText(caption)
+            self._tile_values[name].setText(value)
 
         self._start_button.setEnabled(state is ClockState.IDLE and not locked)
         self._hold_button.setEnabled(state is ClockState.RUNNING)
@@ -1260,15 +1307,21 @@ class ControlPanel(QMainWindow):
             item.setForeground(Qt.GlobalColor.cyan if text.startswith("NEXT") else Qt.GlobalColor.gray)
         self._table.blockSignals(False)
 
-    def _readout_text(self) -> str:
+    def _readout_tiles(self) -> list[tuple[str, str, str]]:
+        """(tile, caption, value) for the header: dashes until the flight has produced numbers."""
         tel = self._session.last
         if tel is None or tel.speed_kmh is None or tel.altitude_km is None:
-            return "SPEED —    ALTITUDE —    FUEL —    ENGINES —"
+            return [(name, name, "—") for name in TILE_NAMES]
         s = self._session.settings
         speed, speed_unit = format_speed(tel.speed_kmh, s.speed_unit)
         altitude, altitude_unit = format_altitude(tel.altitude_km, s.altitude_unit)
         fuel = "—" if tel.fuel_fraction is None else f"{tel.fuel_fraction * 100:.0f} %"
-        return f"SPEED {speed} {speed_unit}    ALTITUDE {altitude} {altitude_unit}    FUEL {fuel}    ENGINES {tel.engines_on}/{tel.engines_total}"
+        return [
+            ("SPEED", f"SPEED  {speed_unit}", speed),
+            ("ALTITUDE", f"ALTITUDE  {altitude_unit}", altitude),
+            ("FUEL", "FUEL", fuel),
+            ("ENGINES", "ENGINES", f"{tel.engines_on}/{tel.engines_total}"),
+        ]
 
     def _source_summary(self) -> str:
         if self._session.source is DataSource.MOCK:

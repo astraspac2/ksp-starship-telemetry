@@ -196,7 +196,8 @@ def test_header_readout_shows_live_numbers(panel):
     panel.now[0] = 140.0  # 40 s on: 10 s past liftoff
     panel.session.telemetry()
     panel.refresh()
-    assert "SPEED" in panel._readout.text() and "KM/H" in panel._readout.text() and "ENGINES 33/33" in panel._readout.text()
+    assert "KM/H" in panel._tile_captions["SPEED"].text() and panel._tile_values["SPEED"].text() != "—"
+    assert panel._tile_values["ENGINES"].text() == "33/33"
 
 
 # HUD tab
@@ -404,3 +405,17 @@ def test_starship_model_toggle_is_saved(panel):
     assert panel.session.settings.starship_model  # on by default
     panel._starship_model.setChecked(False)
     assert not settings_io.load(panel.saved).starship_model
+
+
+def test_header_shows_the_bar_mode_and_dashes_before_any_flight_numbers(panel):
+    panel.refresh()
+    assert panel._mode_label.text() == "FLIGHT BAR"
+    assert [panel._tile_values[name].text() for name in ("SPEED", "ALTITUDE", "FUEL", "ENGINES")] == ["—"] * 4
+    panel._view_mode.setCurrentIndex(1)
+    assert panel._mode_label.text() == "PAD BAR"
+
+
+def test_the_panel_has_four_tabs_and_the_manual_notes_and_panel_look_moved_into_them(panel):
+    assert [panel._tabs.tabText(i) for i in range(panel._tabs.count())] == ["Mission && Timeline", "HUD", "Data && Test", "Looks"]
+    assert panel._tabs.widget(0).isAncestorOf(panel._marker_text)
+    assert panel._tabs.widget(3).isAncestorOf(panel._panel_theme)
