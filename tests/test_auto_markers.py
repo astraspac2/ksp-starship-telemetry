@@ -328,8 +328,9 @@ def test_landing_burn_marker_is_there_from_the_first_time_the_vessel_is_above_70
     assert landing_markers(markers) == []
     orbit_landing_tick(tracker, 110, 71.0, landing_ut=5600.0)  # first time above 70 km: the orbit says when 800 m comes
     assert [m.time for m in landing_markers(markers)] == [110.0 + (5600.0 - 5110.0)]
-    orbit_landing_tick(tracker, 120, 90.0, landing_ut=5590.0)  # and it follows the orbit
-    assert [m.time for m in landing_markers(markers)] == [120.0 + (5590.0 - 5120.0)]
+    orbit_landing_tick(tracker, 120, 90.0, landing_ut=5590.0)  # and it follows the orbit, smoothly
+    (marker,) = landing_markers(markers)
+    assert marker.time == pytest.approx(590.8, abs=0.05)  # eased from 600 toward the new 590, not jumping straight there
 
 
 def test_without_an_orbit_prediction_there_is_no_landing_marker_yet():
@@ -343,9 +344,10 @@ def test_without_an_orbit_prediction_there_is_no_landing_marker_yet():
 def test_in_the_air_the_speed_and_braking_replace_the_orbit_prediction():
     markers = []
     tracker = AutoMarkerTracker(markers)
-    orbit_landing_tick(tracker, 0, 100.0, landing_ut=5200.0)  # high up the orbit's word is used
+    orbit_landing_tick(tracker, -30, 100.0)  # armed, well before the readings below
     for seconds, km in descent(20_000.0, 1000.0, 20.0, 6.0):  # braking in the air: 800 m is 25.9 s in
-        tracker.update(1.0 + seconds, 1.0 + seconds, 5001.0 + seconds, (), km, None, 9999.0)  # the orbit is far off
+        orbit = 9999.0 if seconds > 2.5 else None  # once the air is measured, a far-off orbit is ignored
+        tracker.update(1.0 + seconds, 1.0 + seconds, 5001.0 + seconds, (), km, None, orbit)
     (marker,) = landing_markers(markers)
     assert marker.time == pytest.approx(1.0 + 25.91, abs=0.1)
 
@@ -353,9 +355,23 @@ def test_in_the_air_the_speed_and_braking_replace_the_orbit_prediction():
 def test_a_game_that_repeats_each_reading_still_gives_a_prediction():
     markers = []
     tracker = AutoMarkerTracker(markers)
-    orbit_landing_tick(tracker, 0, 100.0)
+    orbit_landing_tick(tracker, -30, 100.0)
     for seconds, km in descent(20_000.0, 500.0, 0.0, 8.0, step=1.0):
         for _ in range(4):  # the same reading arrives several times
             tracker.update(1.0 + seconds, 1.0 + seconds, 5001.0 + seconds, (), km, None)
     (marker,) = landing_markers(markers)
     assert marker.time == pytest.approx(1.0 + (20_000.0 - 800.0) / 500.0, abs=0.1)
+
+
+def test_one_noisy_reading_barely_moves_the_landing_marker():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    orbit_landing_tick(tracker, -30, 100.0)
+    path = descent(20_000.0, 500.0, 0.0, 12.0)
+    for index, (seconds, km) in enumerate(path):
+        km += 0.05 if index == 18 else 0.0  # one reading 50 m high
+        tracker.update(1.0 + seconds, 1.0 + seconds, 5001.0 + seconds, (), km, None)
+        if index == 14:
+            (before,) = [m.time for m in landing_markers(markers)]
+    (after,) = [m.time for m in landing_markers(markers)]
+    assert after == pytest.approx(before, abs=1.0)

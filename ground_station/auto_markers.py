@@ -39,7 +39,8 @@ LANDING_BURN_ALTITUDE_M = 800.0  # Starship lights its engines for the landing b
 LANDING_ARM_KM = REENTRY_ALTITUDE_KM  # arms like the re-entry marker: only flights that got above 70 km
 LANDING_NAME = "Landing burn"
 LANDING_MOVED_SECONDS = 0.5
-LANDING_RATE_WINDOW = 6.0  # game seconds of readings the sink rate and its slowing are measured over
+LANDING_RATE_WINDOW = 10.0  # game seconds of readings the sink rate and its slowing are measured over
+LANDING_SMOOTHING_SECONDS = 4.0  # the predicted moment moves toward each new prediction with this time constant
 LANDING_RATE_MIN_SPAN = 2.0
 
 NODE = "node"
@@ -85,29 +86,62 @@ def auto_markers_from_dicts(rows) -> list[AutoMarker]:
 def seconds_to_reach(samples: Sequence[tuple[float, float]], target: float) -> float | None:
     """How long until a falling vessel is down to `target` metres, from recent (game time, metres) readings.
 
-    Uses the speed and how fast it is slowing, so a vessel braking in the atmosphere is not predicted to arrive as if
-    it kept its speed. Without a usable slowing it falls back to the plain speed. None when it is not sinking."""
+    Fits a curve through all of the readings (so one noisy reading cannot throw it) that has both a speed and a rate of
+    slowing, so a vessel braking in the atmosphere is not predicted to arrive as if it kept its speed. With no usable
+    slowing it falls back to the plain speed. None when it is not sinking."""
     if len(samples) < 3:
         return None
-    first, middle, last = samples[0], samples[len(samples) // 2], samples[-1]
-    if last[0] - first[0] <= 0 or middle[0] <= first[0] or last[0] <= middle[0]:
+    now = samples[-1][0]
+    # least squares for height = c0 + c1 * tau + c2 * tau^2, with tau the seconds before the newest reading (<= 0)
+    power = [0.0] * 5  # sums of tau^0 .. tau^4
+    moment = [0.0] * 3  # sums of tau^k * height
+    for moment_time, height in samples:
+        tau = moment_time - now
+        for k in range(5):
+            power[k] += tau**k
+        for k in range(3):
+            moment[k] += tau**k * height
+    matrix = [[power[row + col] for col in range(3)] for row in range(3)]
+    solution = _solve3(matrix, moment)
+    if solution is None:
         return None
-    early = (first[1] - middle[1]) / (middle[0] - first[0])  # sinking speed over the first half of the window
-    late = (middle[1] - last[1]) / (last[0] - middle[0])
-    early_at = (first[0] + middle[0]) / 2
-    late_at = (middle[0] + last[0]) / 2
-    slowing = (early - late) / (late_at - early_at)
-    speed = late - slowing * (last[0] - late_at)  # the sinking speed right now
+    c0, c1, c2 = solution
+    speed = -c1  # sinking speed at the newest reading
     if speed <= 0:
         return None
-    distance = last[1] - target
+    distance = c0 - target
     if distance <= 0:
         return 0.0
-    if slowing > 0:
-        room = speed * speed - 2 * slowing * distance
-        if room >= 0:  # it still reaches the target while braking
-            return (speed - math.sqrt(room)) / slowing
+    if abs(c2) > 1e-9:
+        room = c1 * c1 - 4.0 * c2 * distance
+        if room >= 0:
+            roots = [(-c1 + sign * math.sqrt(room)) / (2.0 * c2) for sign in (-1.0, 1.0)]
+            ahead = [r for r in roots if r > 0]
+            if ahead:  # it still gets there while braking
+                return min(ahead)
     return distance / speed
+
+
+def _solve3(matrix: list[list[float]], vector: list[float]) -> tuple[float, float, float] | None:
+    """Solve a 3x3 linear system by Cramer's rule; None when it has no single answer."""
+
+    def det(m):
+        return (
+            m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+        )
+
+    whole = det(matrix)
+    if abs(whole) < 1e-12:
+        return None
+    answer = []
+    for col in range(3):
+        swapped = [row[:] for row in matrix]
+        for row in range(3):
+            swapped[row][col] = vector[row]
+        answer.append(det(swapped) / whole)
+    return answer[0], answer[1], answer[2]
 
 
 def _nearest(target: float, candidates: Sequence[float], limit: float = NODE_MATCH_SECONDS) -> float | None:
@@ -132,6 +166,7 @@ class AutoMarkerTracker:
         self._landing_armed = False
         self._landing_suppressed = False
         self._landing: AutoMarker | None = None
+        self._landing_estimate: tuple[float, float] | None = None  # smoothed (game time, flight time) of the burn
         self._sinking: deque[tuple[float, float]] = deque()  # (game time, metres) while the vessel is falling
 
     def take_changed(self) -> bool:
@@ -148,6 +183,7 @@ class AutoMarkerTracker:
         self._last_altitude = None
         self._landing_armed = self._landing_suppressed = False
         self._landing = None
+        self._landing_estimate = None
         self._sinking.clear()
         for marker in self.markers:
             marker.node_ut = None
@@ -271,6 +307,7 @@ class AutoMarkerTracker:
         if previous is not None and altitude_km < previous and metres <= LANDING_BURN_ALTITUDE_M:
             self._place_landing(t)  # 800 m crossed on the way down
             self._landing_armed = False
+            self._landing_estimate = None
             self._sinking.clear()
             return
         if not self._sinking or ut > self._sinking[-1][0]:  # the game repeats a reading until it has a new one
@@ -281,9 +318,20 @@ class AutoMarkerTracker:
         seconds = seconds_to_reach(self._sinking, LANDING_BURN_ALTITUDE_M) if falling else None
         in_atmosphere = altitude_km <= LANDING_ARM_KM
         if seconds is not None and (in_atmosphere or landing_ut is None or landing_ut <= ut):
-            self._place_landing(t + seconds)  # braking in the air: its own speed says more than the bare orbit
+            self._place_landing(self._smoothed(ut, t + seconds))  # braking in the air: its own speed says more than the orbit
         elif landing_ut is not None and landing_ut > ut:
-            self._place_landing(t + (landing_ut - ut))  # the orbit says when it comes down through 800 m
+            self._place_landing(self._smoothed(ut, t + (landing_ut - ut)))  # the orbit says when 800 m comes
+
+    def _smoothed(self, ut: float, time: float) -> float:
+        """The predicted flight time of the burn, eased toward each new prediction so the marker does not jitter."""
+        if self._landing_estimate is None or ut < self._landing_estimate[0]:
+            self._landing_estimate = (ut, time)
+            return time
+        before_ut, before = self._landing_estimate
+        weight = 1.0 - math.exp(-(ut - before_ut) / LANDING_SMOOTHING_SECONDS)
+        smoothed = before + (time - before) * weight
+        self._landing_estimate = (ut, smoothed)
+        return smoothed
 
     def _place_landing(self, time: float) -> None:
         time = round(time, 1)
