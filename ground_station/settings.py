@@ -54,7 +54,7 @@ class Settings:
     accent: str = ""  # "" = the look's own accent, else "#RRGGBB"
     panel_opacity: float | None = None  # None = the look's own; else 0..1 for the plates behind the gauges
     hud_scale: float = 1.0
-    font: str = ""  # "" = automatic (bundled D-DIN, then system)
+    font: str = ""  # "" = automatic (bundled Oxanium, then D-DIN)
     background: str = "transparent"
     background_color: str = "#00FF00"  # chroma-key green for capture software
     on_top: bool = True

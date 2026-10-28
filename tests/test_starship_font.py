@@ -43,3 +43,18 @@ def test_the_clock_font_is_between_regular_and_medium_and_not_stretched():
 
 def test_an_operators_own_font_choice_still_comes_first():
     assert STARSHIP.tuned(font="D-DIN").family() == "D-DIN"
+
+
+def test_the_pill_uses_oxanium_too():
+    from ground_station.pill import PillWidget
+
+    pill = PillWidget()
+    assert pill._family == "Oxanium" and pill._label_family == "Oxanium"
+    pill.set_time(-60.0)
+    assert not pill.grab().toImage().isNull()  # draws without error
+
+
+def test_the_control_panel_text_is_oxanium_with_d_din_behind_it():
+    from ground_station.panel import STYLE_TEMPLATE
+
+    assert "font-family: 'Oxanium', 'D-DIN'" in STYLE_TEMPLATE

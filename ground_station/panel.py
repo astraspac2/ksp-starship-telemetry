@@ -63,7 +63,7 @@ from .units import (
 )
 
 STYLE_TEMPLATE = """
-QWidget { background: @bg@; color: @text@; font-family: 'D-DIN', 'Segoe UI'; font-size: 13px; }
+QWidget { background: @bg@; color: @text@; font-family: 'Oxanium', 'D-DIN', 'Segoe UI'; font-size: 13px; }
 QLabel { background: transparent; }
 QMainWindow { background: @bg@; }
 QMenuBar, QStatusBar { background: @bar_bg@; }
@@ -173,7 +173,7 @@ STATE_NAMES = {
 }
 COL_ON, COL_TIME, COL_LABEL, COL_DESC, COL_STATUS = range(5)
 AUTO_ON, AUTO_TIME, AUTO_LABEL, AUTO_STATUS = range(4)
-AUTOMATIC_FONT = "Automatic (bundled D-DIN, then system)"
+AUTOMATIC_FONT = "Automatic (bundled Oxanium, then D-DIN)"
 VIEW_LABELS = {
     "flight": "Flight - stage 1, stage separation, flight",
     "pad": "Pad / static fire - engines and dial, thrust and throttle",

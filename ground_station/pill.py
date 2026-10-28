@@ -12,6 +12,7 @@ PILL_WIDTH = 330
 PILL_HEIGHT = 58
 SLANT = 40
 MARGIN = 12
+CLOCK_WEIGHT = QFont.Weight(540)  # Oxanium is a variable font; the overlay's digits sit between Regular and Medium
 WINDOW_HEIGHT = PILL_HEIGHT + 76
 
 
@@ -29,8 +30,8 @@ class PillWidget(HudWindow):
         self._scale = 1.0
         self._font_override = ""
         self._background: QColor | None = None
-        self._family = _pick_font(["D-DIN Exp", "Bahnschrift", "Segoe UI Semibold", "Arial"])  # clock
-        self._label_family = _pick_font(["D-DIN", "Bahnschrift", "Segoe UI Semibold", "Arial"])
+        self._family = _pick_font(["Oxanium", "D-DIN Exp", "Bahnschrift", "Segoe UI Semibold", "Arial"])  # clock
+        self._label_family = _pick_font(["Oxanium", "D-DIN", "Bahnschrift", "Segoe UI Semibold", "Arial"])
         self.resize(PILL_WIDTH + 2 * MARGIN, WINDOW_HEIGHT)
 
     def set_time(self, t: float) -> None:
@@ -51,7 +52,7 @@ class PillWidget(HudWindow):
         self.update()
 
     def set_font_override(self, family: str) -> None:
-        """A chosen font for the pill's text, or '' for the bundled D-DIN."""
+        """A chosen font for the pill's text, or '' for the bundled Oxanium."""
         self._font_override = family
         self.update()
 
@@ -91,14 +92,14 @@ class PillWidget(HudWindow):
         sign, clock = format_clock(self._t)
         sign_font = QFont(clock_family)
         sign_font.setPixelSize(20)
-        sign_font.setWeight(QFont.DemiBold)
+        sign_font.setWeight(CLOCK_WEIGHT)
         painter.setFont(sign_font)
         painter.setPen(QColor(200, 210, 220))
         painter.drawText(QRectF(x + 18, y, 40, PILL_HEIGHT), Qt.AlignVCenter | Qt.AlignLeft, sign)
 
         clock_font = QFont(clock_family)
         clock_font.setPixelSize(33)
-        clock_font.setWeight(QFont.DemiBold)
+        clock_font.setWeight(CLOCK_WEIGHT)
         clock_font.setLetterSpacing(QFont.AbsoluteSpacing, 1.0)
         painter.setFont(clock_font)
         painter.setPen(QColor(255, 255, 255))
