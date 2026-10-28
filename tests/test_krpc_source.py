@@ -426,6 +426,7 @@ def test_reads_maneuver_nodes_and_the_orbit():
         assert sample.node_uts == (1200.0, 1900.0)  # soonest first
         assert (sample.apoapsis_km, sample.periapsis_km) == (150.0, 110.0)
         assert sample.reentry_ut is None  # the orbit stays above 70 km
+        assert sample.landing_ut is None
     finally:
         reader.stop()
 
@@ -436,6 +437,7 @@ def test_predicts_when_a_dipping_orbit_comes_down_through_70_km():
     try:
         assert wait_for(lambda: reader.snapshot().sample is not None)
         assert reader.snapshot().sample.reentry_ut == 1500.0
+        assert reader.snapshot().sample.landing_ut == 1500.0  # the same orbit comes down through 800 m too
     finally:
         reader.stop()
 

@@ -220,6 +220,7 @@ class Session:
             sample.node_uts,
             sample.altitude_m / 1000.0,
             sample.reentry_ut,
+            sample.landing_ut,
         )
         if self.auto.take_changed():
             self.sync_auto_markers()

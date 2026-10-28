@@ -9,9 +9,10 @@ Two kinds:
            placed at the predicted moment, and when 70 km is really crossed on the way down it is set to that moment.
 
   landing  LANDING BURN, when the vessel coming down passes 800 m (above the ground, or above sea level if that is the chosen
-           altitude). Like re-entry it only works after the vessel has been above 70 km. Once it is falling the marker is placed
-           at the predicted moment from how fast it is sinking and slowing, kept up to date as it comes down, and when
-           800 m is really crossed it is set to that moment.
+           altitude). Like re-entry it only works after the vessel has been above 70 km. From the first time the vessel is above
+           70 km the marker is placed at the predicted moment (from the orbit while it is still above the air, from how
+           fast it is sinking and slowing once it is braking in it), kept up to date as it comes down, and when 800 m
+           is really crossed it is set to that moment.
 
 The re-entry and landing markers are kept off the timeline until the flight clock reaches T+00:10:00 (see
 LATE_MARKER_VISIBLE_FROM), so they do not sit on the bar during the launch.
@@ -178,12 +179,13 @@ class AutoMarkerTracker:
         node_uts: Sequence[float],
         altitude_km: float | None,
         reentry_ut: float | None,
+        landing_ut: float | None = None,
     ) -> None:
         """Take one reading: `wall` is real time, `t` the flight clock, `ut` game time, the rest as the game reports."""
         if ut is None:
             return
         self._follow_nodes(wall, t, ut, sorted(u for u in node_uts if u > ut))
-        self._watch_landing(t, ut, altitude_km)  # reads the previous altitude, so it goes before the re-entry watch
+        self._watch_landing(t, ut, altitude_km, landing_ut)  # reads the previous altitude, so it goes before the re-entry watch
         self._watch_reentry(t, ut, altitude_km, reentry_ut)
 
     def _follow_nodes(self, wall: float, t: float, ut: float, nodes: list[float]) -> None:
@@ -253,7 +255,7 @@ class AutoMarkerTracker:
             self._reentry.time = time
             self._changed = True
 
-    def _watch_landing(self, t: float, ut: float, altitude_km: float | None) -> None:
+    def _watch_landing(self, t: float, ut: float, altitude_km: float | None, landing_ut: float | None) -> None:
         if self._landing is not None and self._landing not in self.markers:
             self._landing, self._landing_suppressed = None, True  # taken off the list by the operator
         if altitude_km is None or not math.isfinite(altitude_km):
@@ -262,23 +264,26 @@ class AutoMarkerTracker:
         if altitude_km > LANDING_ARM_KM and not self._landing_armed:  # every climb above 70 km is a new flight
             self._landing_armed, self._landing_suppressed = True, False
         previous = self._last_altitude
-        falling = previous is not None and altitude_km < previous
-        if not self._landing_armed or not falling:
-            self._sinking.clear()
+        if not self._landing_armed:
             return
-        if metres <= LANDING_BURN_ALTITUDE_M:
+        if previous is not None and altitude_km > previous:
+            self._sinking.clear()  # climbing: what was measured on the way down no longer applies
+        if previous is not None and altitude_km < previous and metres <= LANDING_BURN_ALTITUDE_M:
             self._place_landing(t)  # 800 m crossed on the way down
             self._landing_armed = False
             self._sinking.clear()
             return
-        self._sinking.append((ut, metres))
+        if not self._sinking or ut > self._sinking[-1][0]:  # the game repeats a reading until it has a new one
+            self._sinking.append((ut, metres))
         while self._sinking and ut - self._sinking[0][0] > LANDING_RATE_WINDOW:
             self._sinking.popleft()
-        if self._sinking[-1][0] - self._sinking[0][0] < LANDING_RATE_MIN_SPAN:
-            return
-        seconds = seconds_to_reach(self._sinking, LANDING_BURN_ALTITUDE_M)
-        if seconds is not None:
-            self._place_landing(t + seconds)
+        falling = self._sinking[-1][0] - self._sinking[0][0] >= LANDING_RATE_MIN_SPAN
+        seconds = seconds_to_reach(self._sinking, LANDING_BURN_ALTITUDE_M) if falling else None
+        in_atmosphere = altitude_km <= LANDING_ARM_KM
+        if seconds is not None and (in_atmosphere or landing_ut is None or landing_ut <= ut):
+            self._place_landing(t + seconds)  # braking in the air: its own speed says more than the bare orbit
+        elif landing_ut is not None and landing_ut > ut:
+            self._place_landing(t + (landing_ut - ut))  # the orbit says when it comes down through 800 m
 
     def _place_landing(self, time: float) -> None:
         time = round(time, 1)

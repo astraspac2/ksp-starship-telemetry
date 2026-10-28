@@ -27,6 +27,7 @@ EXTRAS_SECONDS = 0.5  # maneuver nodes and the re-entry prediction are read this
 EXPECTED_KRPC_VERSION = "0.6.0"  # the kRPC mod this app is built and tested with; a newer one (0.7.0) does not connect
 KRPC_DOWNLOAD_URL = "github.com/krpc/krpc/releases/tag/v0.6.0"
 REENTRY_ALTITUDE_M = 70_000.0  # where the re-entry prediction looks for the vessel coming down
+LANDING_BURN_ALTITUDE_M = 800.0  # and where the landing burn prediction does
 
 
 class ConnState(Enum):
@@ -58,6 +59,7 @@ class LiveSample:
     apoapsis_km: float | None = None  # of the current orbit, above sea level
     periapsis_km: float | None = None
     reentry_ut: float | None = None  # game time the orbit will next come down through 70 km, if it dips that low
+    landing_ut: float | None = None  # the same for 800 m
     thrust_n: float | None = None  # total thrust of the engines being flown, in newtons; None = burning but not known
     max_thrust_n: float | None = None  # what those engines would give at full throttle; None = not known
     throttle: float | None = None  # the throttle setting, 0..1
@@ -156,7 +158,7 @@ class _Streams:
         self.apoapsis = conn.add_stream(getattr, orbit, "apoapsis_altitude")
         self.periapsis = conn.add_stream(getattr, orbit, "periapsis_altitude")
         self._extras_at: float | None = None
-        self._extras: tuple[tuple[float, ...], float | None] = ((), None)
+        self._extras: tuple[tuple[float, ...], float | None, float | None] = ((), None, None)
         self.situation = conn.add_stream(getattr, vessel, "situation")
         self.current_stage = conn.add_stream(getattr, vessel.control, "current_stage")
         self.built_at_stage = self.current_stage()
@@ -262,25 +264,26 @@ class _Streams:
         thrust = sep_cluster.cluster_thrust_n(sum(pattern), producing, first, first_nozzles, total_kn, each, self.throttle())
         return pattern, thrust, None if each is None else each * sep_cluster.CLUSTER_ENGINES
 
-    def _reentry_ut(self, ut: float) -> float | None:
-        """Game time the orbit next comes down through 70 km, or None when it never gets that low (or is already below)."""
+    def _coming_down_ut(self, ut: float, altitude_m: float) -> float | None:
+        """Game time the orbit next comes down through `altitude_m`, or None when it never gets that low (or is already below)."""
         orbit = self._vessel.orbit
-        radius = orbit.body.equatorial_radius + REENTRY_ALTITUDE_M
+        radius = orbit.body.equatorial_radius + altitude_m
         if not (orbit.periapsis < radius < orbit.apoapsis):
             return None
         anomaly = orbit.true_anomaly_at_radius(radius)  # on the way up; the way down is its mirror image
         crossing = orbit.ut_at_true_anomaly(2.0 * math.pi - anomaly)
         return crossing if crossing > ut else None
 
-    def _read_extras(self, now: float, ut: float) -> tuple[tuple[float, ...], float | None]:
+    def _read_extras(self, now: float, ut: float) -> tuple[tuple[float, ...], float | None, float | None]:
         if self._extras_at is None or now - self._extras_at >= EXTRAS_SECONDS:
             self._extras_at = now
             nodes = tuple(sorted(node.ut for node in self._vessel.control.nodes))
             try:
-                reentry = self._reentry_ut(ut)
+                reentry = self._coming_down_ut(ut, REENTRY_ALTITUDE_M)
+                landing = self._coming_down_ut(ut, LANDING_BURN_ALTITUDE_M)
             except Exception:  # an orbit the maths cannot handle (escape, no orbit) just has no prediction
-                reentry = None
-            self._extras = (nodes, reentry)
+                reentry = landing = None
+            self._extras = (nodes, reentry, landing)
         return self._extras
 
     def read(self, now: float) -> LiveSample:
@@ -306,7 +309,7 @@ class _Streams:
             rated = None if rated is None or part_rated is None else rated + part_rated
         pitch, heading, roll = attitude_from_rotation(self.rotation())
         ut = self.ut()
-        nodes, reentry_ut = self._read_extras(now, ut)
+        nodes, reentry_ut, landing_ut = self._read_extras(now, ut)
         apoapsis, periapsis = self.apoapsis(), self.periapsis()
         return LiveSample(
             met=self.met(),
@@ -327,6 +330,7 @@ class _Streams:
             apoapsis_km=apoapsis / 1000.0 if math.isfinite(apoapsis) else None,
             periapsis_km=periapsis / 1000.0 if math.isfinite(periapsis) else None,
             reentry_ut=reentry_ut,
+            landing_ut=landing_ut,
             thrust_n=thrust,
             max_thrust_n=rated if rated else None,
             throttle=self.throttle(),
