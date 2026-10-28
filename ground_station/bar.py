@@ -95,7 +95,7 @@ ELEMENTS = {
 }
 MAP_FADE_SECONDS = 0.6  # the engine dial and the map swapping places; a change of arrangement takes the slower ARRANGEMENT_FADE
 RING_EARLY_SECONDS = 0.16  # the fuel ring starts to fill this long before its engine dots are fully there (0.2 s after they start, for the map swap)
-RING_FILL_SECONDS = 0.7  # and takes this long to fill
+RING_FILL_SECONDS = 0.4  # and takes this long to fill
 FADE_OUT_SHARE = 0.4  # the first share of a change is the old element going; the rest is the new one arriving
 
 DEFAULT_MILESTONES = [Milestone("LIFTOFF", 0.0), Milestone("MAX Q", 70.0), Milestone("STAGE SEP", 143.0)]

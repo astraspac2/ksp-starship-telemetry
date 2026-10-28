@@ -169,7 +169,7 @@ def test_the_fuel_ring_of_a_newly_arrived_engine_dial_starts_as_its_dots_are_all
     bar.grab()
     arrival = bar._changed_at + FADE_OUT_SHARE * MAP_FADE_SECONDS  # the dots start to appear
     full = bar._changed_at + MAP_FADE_SECONDS  # and are all there
-    assert RING_FILL_SECONDS == 0.7 and abs((full - RING_EARLY_SECONDS) - (arrival + 0.2)) < 1e-9  # 0.2 s after the dots start
+    assert RING_FILL_SECONDS == 0.4 and abs((full - RING_EARLY_SECONDS) - (arrival + 0.2)) < 1e-9  # 0.2 s after the dots start
     assert bar._ring_fill(arrival + 0.19) == 0.0
     assert bar._ring_fill(arrival + 0.2 + 0.07) > 0.0
     assert 0.4 < bar._ring_fill(arrival + 0.2 + RING_FILL_SECONDS / 2) < 0.6
