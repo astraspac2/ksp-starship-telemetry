@@ -369,3 +369,43 @@ def test_a_live_session_feeds_the_staging_trace_and_a_demo_source_does_not():
     demo.trace = _TraceStub()
     demo.telemetry()
     assert demo.trace.rows == []
+
+
+def _flying(ut, met, state=ConnState.CONNECTED, stale=False):
+    sample = LiveSample(met, 700.0, 50_000.0, 0.5, 0.0, 6, 6, "flying", 0.0, ut=ut)
+    return ReaderStatus(state, sample, 0.0 if state is ConnState.CONNECTED and not stale else 9.0, None)
+
+
+def test_jumping_to_mission_time_sets_the_clock_to_what_ksp_reports():
+    session = make_session()
+    session.connect()
+    reader = FakeReader.instances[0]
+    assert not session.can_jump_to_mission_time() and session.jump_to_mission_time() is None  # no data yet
+    reader.status = _flying(5000.0, 455.0)
+    assert session.can_jump_to_mission_time()
+    session.start_countdown()
+    session.abort_countdown()
+    assert session.jump_to_mission_time() == 455.0
+    assert session.t == 455.0 and session.clock.last_t == 455.0 and session.clock.state is ClockState.RUNNING
+
+
+def test_there_is_nothing_to_jump_to_before_ksp_starts_its_mission_clock_or_without_live_data():
+    session = make_session()
+    session.connect()
+    reader = FakeReader.instances[0]
+    reader.status = _flying(5000.0, 0.0)  # mission time not started
+    assert not session.can_jump_to_mission_time() and session.jump_to_mission_time() is None
+    reader.status = ReaderStatus(ConnState.CONNECTED, _flying(5000.0, 455.0).sample, 9.0, None)  # a stale reading
+    stale = session.reader_status()
+    assert stale.stale and not session.can_jump_to_mission_time()
+    demo = make_session(source="MOCK")
+    assert not demo.can_jump_to_mission_time()
+
+
+def test_jumping_leaves_the_detected_separation_alone():
+    session = make_session()
+    session.connect()
+    session.separation.separated_at = 104.0
+    FakeReader.instances[0].status = _flying(5000.0, 455.0)
+    session.jump_to_mission_time()
+    assert session.separation.separated_at == 104.0

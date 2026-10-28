@@ -116,3 +116,17 @@ def test_no_game_time_means_no_progress():
     clock.advance(1000.0, False, 0.0)
     clock.advance(1010.0, False, 0.0)
     assert clock.advance(None, False, 0.0) == pytest.approx(-50.0)
+
+
+def test_syncing_to_mission_time_sets_the_clock_and_lets_it_carry_on():
+    from ground_station.clock import ClockState, CountdownClock
+
+    clock = CountdownClock(60.0)
+    clock.start()
+    clock.advance(1000.0, False, 0.0)
+    clock.abort()
+    assert clock.state is ClockState.ABORTED
+    clock.sync_to_mission_time(2000.0, 455.0)
+    assert clock.state is ClockState.RUNNING and clock.last_t == 455.0
+    clock.hold_at_zero = False
+    assert clock.advance(2010.0, False, 0.0) == pytest.approx(465.0)  # game time goes on from there

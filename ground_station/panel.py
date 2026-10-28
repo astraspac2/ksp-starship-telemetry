@@ -341,12 +341,18 @@ class ControlPanel(QMainWindow):
         self._lock = QCheckBox("BROADCAST LOCK")
         self._lock.setStyleSheet("font-weight: bold;")
         self._lock.setToolTip("Locks every setting and the Start, Resume and Reset buttons. Hold and Abort stay available.")
+        self._jump_button = QPushButton("Jump to mission time")
+        self._jump_button.setToolTip(
+            "Sets the bar's clock to the mission time KSP shows at the top left (it differs every flight). "
+            "Only reads from KSP; nothing is sent to it."
+        )
         self._abort_button = QPushButton("ABORT")
         self._abort_button.setObjectName("abort")
         self._abort_button.setToolTip("Scrubs the countdown on the display. Nothing is sent to KSP.")
         self._abort_button.setMinimumHeight(40)
         right.addWidget(self._lock, 0, Qt.AlignRight)
         right.addStretch(1)
+        right.addWidget(self._jump_button)
         right.addWidget(self._abort_button)
         layout.addLayout(right, 1)
 
@@ -355,6 +361,7 @@ class ControlPanel(QMainWindow):
         self._resume_button.clicked.connect(self._session.resume_countdown)
         self._reset_button.clicked.connect(self._session.reset_countdown)
         self._abort_button.clicked.connect(self._abort)
+        self._jump_button.clicked.connect(self._jump_to_mission_time)
         self._lock.toggled.connect(lambda _locked: self.refresh())
         return box
 
@@ -1161,6 +1168,14 @@ class ControlPanel(QMainWindow):
         )
         return answer == QMessageBox.Yes
 
+    def _jump_to_mission_time(self) -> None:
+        t = self._session.jump_to_mission_time()
+        if t is None:
+            self.statusBar().showMessage("KSP is not reporting a running mission time yet, so there is nothing to jump to.")
+        else:
+            self.statusBar().showMessage(f"Clock set to KSP's mission time, {format_clock_text(t)}.", 5000)
+        self.refresh()
+
     def _abort(self) -> None:
         if self._confirm_abort():
             self._session.abort_countdown()
@@ -1268,6 +1283,7 @@ class ControlPanel(QMainWindow):
         self._resume_button.setEnabled(state is ClockState.HELD and not locked)
         self._reset_button.setEnabled(state is not ClockState.IDLE and not locked)
         self._abort_button.setEnabled(state in (ClockState.RUNNING, ClockState.HELD) and session.t < 0)
+        self._jump_button.setEnabled(session.can_jump_to_mission_time() and not locked)
         self._tabs.setEnabled(not locked)
         self._view_menu.setEnabled(not locked)
         self._start_text.setEnabled(state is ClockState.IDLE)

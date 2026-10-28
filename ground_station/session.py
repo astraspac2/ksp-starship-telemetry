@@ -157,6 +157,27 @@ class Session:
         self.t = self.clock.last_t
         self.separation.reset()
 
+    def can_jump_to_mission_time(self) -> bool:
+        """Whether KSP is reporting a running mission clock (live, a fresh reading, mission time past zero)."""
+        status = self.reader_status()
+        return (
+            self.source is DataSource.LIVE
+            and status.sample is not None
+            and status.state is ConnState.CONNECTED
+            and not status.stale
+            and status.sample.met > 0
+        )
+
+    def jump_to_mission_time(self) -> float | None:
+        """Set the bar's clock to KSP's mission time as it is now, which differs every flight. Returns that time, or None
+        when KSP has no running mission clock to jump to. Only reads from the game."""
+        if not self.can_jump_to_mission_time():
+            return None
+        sample = self.reader_status().sample
+        self.clock.sync_to_mission_time(sample.ut, sample.met)
+        self.t = sample.met
+        return sample.met
+
     def abort_countdown(self) -> None:
         """Scrub the countdown on the display. Nothing is sent to KSP."""
         self.clock.abort()

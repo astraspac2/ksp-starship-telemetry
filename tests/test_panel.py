@@ -481,3 +481,42 @@ def test_clearing_the_picture_keeps_the_look_but_forgets_the_file(panel, tmp_pat
     panel._set_panel_image(_picture(tmp_path, "#00ff00"))
     panel._set_panel_image("")
     assert panel.session.settings.panel_image == "" and settings_io.load(panel.saved).panel_image == ""
+
+
+def _flying_status(met, state=None, age=0.0):
+    from ground_station.krpc_source import ConnState, LiveSample, ReaderStatus
+
+    sample = LiveSample(met, 700.0, 50_000.0, 0.5, 0.0, 6, 6, "flying", 0.0, ut=5000.0)
+    return ReaderStatus(state or ConnState.CONNECTED, sample, age, None)
+
+
+def test_jump_to_mission_time_button_sits_above_abort_and_follows_ksp(panel):
+    panel.session.settings.source = "LIVE"
+    panel.session.set_source(DataSource.LIVE)
+    panel.session.connect()
+    reader = FakeReader.instances[0]
+    reader.snapshot = lambda: _flying_status(0.0)  # mission time not started
+    panel.resize(1100, 760)
+    panel.show()
+    QApplication.processEvents()
+    jump_y, abort_y = panel._jump_button.mapTo(panel, panel._jump_button.rect().topLeft()).y(), panel._abort_button.mapTo(panel, panel._abort_button.rect().topLeft()).y()
+    assert jump_y < abort_y  # directly above the abort button
+    panel.refresh()
+    assert panel._jump_button.text() == "Jump to mission time" and not panel._jump_button.isEnabled()
+    reader.snapshot = lambda: _flying_status(455.0)
+    panel.refresh()
+    assert panel._jump_button.isEnabled()
+    panel._jump_button.click()
+    assert panel.session.clock.last_t == 455.0 and "T+00:07:35" in panel.statusBar().currentMessage()
+
+
+def test_jump_to_mission_time_is_locked_by_the_broadcast_lock_and_says_so_when_there_is_nothing_to_jump_to(panel):
+    panel.session.set_source(DataSource.LIVE)
+    panel.session.connect()
+    FakeReader.instances[0].snapshot = lambda: _flying_status(455.0)
+    panel._lock.setChecked(True)
+    assert not panel._jump_button.isEnabled()
+    panel._lock.setChecked(False)
+    FakeReader.instances[0].snapshot = lambda: _flying_status(0.0)
+    panel._jump_to_mission_time()
+    assert "nothing to jump to" in panel.statusBar().currentMessage()
