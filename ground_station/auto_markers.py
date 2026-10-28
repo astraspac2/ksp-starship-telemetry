@@ -9,9 +9,9 @@ Two kinds:
            placed at the predicted moment, and when 70 km is really crossed on the way down it is set to that moment.
 
   landing  LANDING BURN, when the vessel coming down passes 800 m (above the ground, or above sea level if that is the chosen
-           altitude). Like re-entry it only works after the vessel has been above 70 km. Once it is falling through the last
-           stretch the marker is placed at the predicted moment from how fast it is sinking, and when 800 m is really
-           crossed it is set to that moment.
+           altitude). Like re-entry it only works after the vessel has been above 70 km. Once it is falling the marker is placed
+           at the predicted moment from how fast it is sinking and slowing, kept up to date as it comes down, and when
+           800 m is really crossed it is set to that moment.
 
 The re-entry and landing markers are kept off the timeline until the flight clock reaches T+00:10:00 (see
 LATE_MARKER_VISIBLE_FROM), so they do not sit on the bar during the launch.
@@ -36,11 +36,10 @@ LATE_MARKER_VISIBLE_FROM = 600.0  # these two stay off the timeline until the fl
 
 LANDING_BURN_ALTITUDE_M = 800.0  # Starship lights its engines for the landing burn at about this height
 LANDING_ARM_KM = REENTRY_ALTITUDE_KM  # arms like the re-entry marker: only flights that got above 70 km
-LANDING_PREDICT_KM = 10.0  # the sink rate is only trusted for a prediction below this
 LANDING_NAME = "Landing burn"
 LANDING_MOVED_SECONDS = 0.5
-LANDING_RATE_WINDOW = 5.0  # game seconds of readings the sink rate is measured over
-LANDING_RATE_MIN_SPAN = 1.0
+LANDING_RATE_WINDOW = 6.0  # game seconds of readings the sink rate and its slowing are measured over
+LANDING_RATE_MIN_SPAN = 2.0
 
 NODE = "node"
 REENTRY = "reentry"
@@ -80,6 +79,34 @@ def auto_markers_from_dicts(rows) -> list[AutoMarker]:
         if name and math.isfinite(time) and kind in (NODE, REENTRY, LANDING):
             markers.append(AutoMarker(name, time, kind, bool(row.get("enabled", True))))
     return markers
+
+
+def seconds_to_reach(samples: Sequence[tuple[float, float]], target: float) -> float | None:
+    """How long until a falling vessel is down to `target` metres, from recent (game time, metres) readings.
+
+    Uses the speed and how fast it is slowing, so a vessel braking in the atmosphere is not predicted to arrive as if
+    it kept its speed. Without a usable slowing it falls back to the plain speed. None when it is not sinking."""
+    if len(samples) < 3:
+        return None
+    first, middle, last = samples[0], samples[len(samples) // 2], samples[-1]
+    if last[0] - first[0] <= 0 or middle[0] <= first[0] or last[0] <= middle[0]:
+        return None
+    early = (first[1] - middle[1]) / (middle[0] - first[0])  # sinking speed over the first half of the window
+    late = (middle[1] - last[1]) / (last[0] - middle[0])
+    early_at = (first[0] + middle[0]) / 2
+    late_at = (middle[0] + last[0]) / 2
+    slowing = (early - late) / (late_at - early_at)
+    speed = late - slowing * (last[0] - late_at)  # the sinking speed right now
+    if speed <= 0:
+        return None
+    distance = last[1] - target
+    if distance <= 0:
+        return 0.0
+    if slowing > 0:
+        room = speed * speed - 2 * slowing * distance
+        if room >= 0:  # it still reaches the target while braking
+            return (speed - math.sqrt(room)) / slowing
+    return distance / speed
 
 
 def _nearest(target: float, candidates: Sequence[float], limit: float = NODE_MATCH_SECONDS) -> float | None:
@@ -232,7 +259,7 @@ class AutoMarkerTracker:
         if altitude_km is None or not math.isfinite(altitude_km):
             return
         metres = altitude_km * 1000.0
-        if altitude_km > LANDING_ARM_KM and not self._landing_armed:  # every climb above 10 km is a new flight
+        if altitude_km > LANDING_ARM_KM and not self._landing_armed:  # every climb above 70 km is a new flight
             self._landing_armed, self._landing_suppressed = True, False
         previous = self._last_altitude
         falling = previous is not None and altitude_km < previous
@@ -247,12 +274,11 @@ class AutoMarkerTracker:
         self._sinking.append((ut, metres))
         while self._sinking and ut - self._sinking[0][0] > LANDING_RATE_WINDOW:
             self._sinking.popleft()
-        first_ut, first_metres = self._sinking[0]
-        if altitude_km > LANDING_PREDICT_KM or ut - first_ut < LANDING_RATE_MIN_SPAN:
+        if self._sinking[-1][0] - self._sinking[0][0] < LANDING_RATE_MIN_SPAN:
             return
-        rate = (first_metres - metres) / (ut - first_ut)
-        if rate > 0:
-            self._place_landing(t + (metres - LANDING_BURN_ALTITUDE_M) / rate)
+        seconds = seconds_to_reach(self._sinking, LANDING_BURN_ALTITUDE_M)
+        if seconds is not None:
+            self._place_landing(t + seconds)
 
     def _place_landing(self, time: float) -> None:
         time = round(time, 1)

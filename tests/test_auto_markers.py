@@ -9,6 +9,7 @@ from ground_station.auto_markers import (
     AutoMarkerTracker,
     auto_markers_from_dicts,
     auto_markers_to_dicts,
+    seconds_to_reach,
 )
 
 
@@ -94,13 +95,17 @@ def orbit_tick(tracker, t, ut, altitude, reentry_ut=None):
     tracker.update(float(t), t, ut, (), altitude, reentry_ut)
 
 
+def reentries(markers):
+    return [m for m in markers if m.kind == REENTRY]
+
+
 def test_reentry_needs_the_vessel_to_have_been_above_70_km_first():
     markers = []
     tracker = AutoMarkerTracker(markers)
     orbit_tick(tracker, 100, 1000.0, 69.0, reentry_ut=1300.0)  # a low hop: never above 70 km
     orbit_tick(tracker, 101, 1001.0, 68.0)
     orbit_tick(tracker, 102, 1002.0, 60.0)
-    assert markers == []
+    assert reentries(markers) == []
 
 
 def test_the_threshold_is_70_km():
@@ -108,7 +113,7 @@ def test_the_threshold_is_70_km():
     tracker = AutoMarkerTracker(markers)
     orbit_tick(tracker, 1, 1001.0, 71.0)
     orbit_tick(tracker, 2, 1002.0, 71.0, reentry_ut=1100.0)
-    assert len(markers) == 1
+    assert len(reentries(markers)) == 1
 
 
 def test_a_suborbital_flight_above_70_km_gets_a_reentry_marker():
@@ -118,7 +123,7 @@ def test_a_suborbital_flight_above_70_km_gets_a_reentry_marker():
     orbit_tick(tracker, 200, 1100.0, 120.0)  # went above 70 km, no orbit at all
     orbit_tick(tracker, 300, 1200.0, 95.0)
     orbit_tick(tracker, 310, 1210.0, 69.0)
-    assert [m.time for m in markers] == [310.0]
+    assert [m.time for m in reentries(markers)] == [310.0]
 
 
 def test_reentry_is_predicted_after_a_deorbit_burn_and_set_when_70_km_is_crossed():
@@ -126,14 +131,14 @@ def test_reentry_is_predicted_after_a_deorbit_burn_and_set_when_70_km_is_crossed
     tracker = AutoMarkerTracker(markers)
     orbit_tick(tracker, 5000, 8000.0, 155.0)  # in orbit
     orbit_tick(tracker, 5100, 8100.0, 155.0, reentry_ut=8900.0)  # after the deorbit burn
-    assert markers == [AutoMarker("Re-entry", 5900.0, REENTRY)]
+    assert reentries(markers) == [AutoMarker("Re-entry", 5900.0, REENTRY)]
     orbit_tick(tracker, 5110, 8110.0, 150.0, reentry_ut=8900.0)
-    assert markers[0].time == 5900.0  # same prediction, no jitter
+    assert reentries(markers)[0].time == 5900.0  # same prediction, no jitter
     for t, alt in ((5880, 80.0), (5890, 72.0), (5901, 69.0)):
         orbit_tick(tracker, t, 8000.0 + t - 5000, alt)
-    assert len(markers) == 1 and markers[0].time == 5901.0  # the real crossing
+    assert len(reentries(markers)) == 1 and reentries(markers)[0].time == 5901.0  # the real crossing
     orbit_tick(tracker, 5950, 8950.0, 60.0)
-    assert markers[0].time == 5901.0
+    assert reentries(markers)[0].time == 5901.0
 
 
 def test_reentry_without_a_prediction_is_still_marked_when_70_km_is_crossed():
@@ -142,7 +147,7 @@ def test_reentry_without_a_prediction_is_still_marked_when_70_km_is_crossed():
     orbit_tick(tracker, 5000, 8000.0, 155.0)
     orbit_tick(tracker, 6000, 9000.0, 80.0)
     orbit_tick(tracker, 6010, 9010.0, 69.0)
-    assert [m.time for m in markers] == [6010.0]
+    assert [m.time for m in reentries(markers)] == [6010.0]
 
 
 def test_the_marker_is_not_made_again_after_the_crossing_when_the_operator_deletes_it():
@@ -151,11 +156,11 @@ def test_the_marker_is_not_made_again_after_the_crossing_when_the_operator_delet
     orbit_tick(tracker, 1, 1001.0, 120.0)
     orbit_tick(tracker, 2, 1002.0, 90.0)
     orbit_tick(tracker, 3, 1003.0, 69.0)
-    assert len(markers) == 1
+    assert len(reentries(markers)) == 1
     markers.clear()  # the operator deletes it
     orbit_tick(tracker, 4, 1004.0, 60.0, reentry_ut=1100.0)
     orbit_tick(tracker, 5, 1005.0, 40.0)
-    assert markers == []
+    assert reentries(markers) == []
 
 
 def test_a_second_flight_gets_its_own_reentry_after_dropping_below_70_km():
@@ -163,7 +168,7 @@ def test_a_second_flight_gets_its_own_reentry_after_dropping_below_70_km():
     tracker = AutoMarkerTracker(markers)
     for t, alt in ((1, 120.0), (2, 90.0), (3, 69.0), (4, 60.0), (5, 100.0), (6, 90.0), (7, 69.0)):
         orbit_tick(tracker, t, 1000.0 + t, alt)
-    assert len(markers) == 1 and markers[0].time == 7.0  # the old marker is reused and moved
+    assert len(reentries(markers)) == 1 and reentries(markers)[0].time == 7.0  # the old marker is reused and moved
 
 
 def test_a_low_hop_after_a_finished_reentry_is_not_marked():
@@ -172,7 +177,7 @@ def test_a_low_hop_after_a_finished_reentry_is_not_marked():
     for t, alt in ((1, 120.0), (2, 90.0), (3, 69.0), (4, 68.0), (5, 60.0)):  # re-entry done, back low
         orbit_tick(tracker, t, 1000.0 + t, alt)
     orbit_tick(tracker, 6, 1006.0, 50.0, reentry_ut=1100.0)  # the next hop never gets above 70 km
-    assert [m.time for m in markers] == [3.0]  # still the first flight's crossing, not moved to the new prediction
+    assert [m.time for m in reentries(markers)] == [3.0]  # still the first flight's crossing, not moved to the new prediction
 
 
 def test_a_deleted_reentry_marker_stays_deleted():
@@ -182,7 +187,7 @@ def test_a_deleted_reentry_marker_stays_deleted():
     orbit_tick(tracker, 5100, 8100.0, 155.0, reentry_ut=8900.0)
     markers.clear()
     orbit_tick(tracker, 5101, 8101.0, 154.0, reentry_ut=8899.0)
-    assert markers == []
+    assert reentries(markers) == []
 
 
 def test_a_new_flight_reuses_the_old_reentry_marker():
@@ -190,7 +195,7 @@ def test_a_new_flight_reuses_the_old_reentry_marker():
     tracker = AutoMarkerTracker(markers)
     orbit_tick(tracker, 5000, 8000.0, 155.0)
     orbit_tick(tracker, 5100, 8100.0, 155.0, reentry_ut=8900.0)
-    assert len(markers) == 1 and markers[0].time == 5900.0
+    assert len(reentries(markers)) == 1 and reentries(markers)[0].time == 5900.0
 
 
 def test_a_missing_or_unknown_altitude_does_nothing():
@@ -225,21 +230,40 @@ def test_landing_burn_is_marked_when_800_m_is_crossed_on_the_way_down():
     assert [(m.name, m.time) for m in landing_markers(markers)] == [("Landing burn", 1272.0)]
 
 
-def test_landing_burn_is_predicted_from_the_sink_rate_below_10_km_and_set_at_the_real_crossing():
-    markers = []
-    tracker = AutoMarkerTracker(markers)
-    sink(tracker, [(0, 75.0), (95, 11.0), (96, 10.0), (97, 9.0), (98, 8.0), (99, 7.0), (100, 6.0)])
-    # sinking 1 km per second: 6 km now, 800 m is 5.2 s away
-    assert [m.time for m in landing_markers(markers)] == [1105.2]
-    sink(tracker, [(105, 1.0), (106, 0.7)])
-    assert [m.time for m in landing_markers(markers)] == [1106.0]  # the real crossing
+def descent(h0, speed, slowing, until, step=0.5):
+    """Readings (seconds, kilometres) of a vessel sinking at `speed` m/s and slowing by `slowing` m/s per second."""
+    out, t = [], 0.0
+    while t <= until:
+        out.append((t, (h0 - speed * t + 0.5 * slowing * t * t) / 1000.0))
+        t += step
+    return out
 
 
-def test_nothing_is_predicted_while_still_high_up():
+def test_landing_burn_is_placed_as_soon_as_the_vessel_is_falling_and_set_at_the_real_crossing():
     markers = []
     tracker = AutoMarkerTracker(markers)
-    sink(tracker, [(0, 80.0), (10, 50.0), (20, 40.0), (30, 30.0), (40, 20.0), (50, 11.0)])
-    assert landing_markers(markers) == []
+    sink(tracker, [(0, 100.0)] + descent(100_000.0, 500.0, 0.0, 10.0)[1:])  # 95 km, still far above 800 m
+    assert [m.time for m in landing_markers(markers)] == [1000.0 + (100_000.0 - 800.0) / 500.0]
+    sink(tracker, [(198, 1.0), (199, 0.7)])
+    assert [m.time for m in landing_markers(markers)] == [1199.0]  # the real crossing
+
+
+def test_the_prediction_allows_for_the_vessel_slowing_down():
+    path = [(t, km * 1000.0) for t, km in descent(20_000.0, 1000.0, 20.0, 6.0)]  # 800 m is 25.9 s in
+    assert seconds_to_reach(path, 800.0) == pytest.approx(25.91 - 6.0, abs=0.05)
+    steady = [(t, 20_000.0 - 1000.0 * t) for t, _ in path]
+    assert seconds_to_reach(steady, 800.0) == pytest.approx((20_000.0 - 6000.0 - 800.0) / 1000.0)
+
+
+def test_no_prediction_without_enough_readings_or_when_not_sinking():
+    assert seconds_to_reach([(0.0, 5000.0), (1.0, 4000.0)], 800.0) is None
+    assert seconds_to_reach([(0.0, 5000.0), (1.0, 5000.0), (2.0, 5000.0)], 800.0) is None
+    assert seconds_to_reach([(0.0, 5000.0), (1.0, 5500.0), (2.0, 6000.0)], 800.0) is None
+
+
+def test_a_vessel_that_brakes_to_a_halt_above_the_target_falls_back_to_its_speed():
+    path = [(t, km * 1000.0) for t, km in descent(20_000.0, 1000.0, 100.0, 6.0)]  # would stop before 800 m
+    assert seconds_to_reach(path, 800.0) is not None
 
 
 def test_a_launch_through_800_m_is_not_a_landing_burn():
@@ -284,3 +308,10 @@ def test_a_new_flight_reuses_the_old_landing_marker():
 def test_the_landing_marker_round_trips_through_the_settings():
     markers = [AutoMarker("Landing burn", 1060.0, LANDING)]
     assert auto_markers_from_dicts(auto_markers_to_dicts(markers)) == markers
+
+
+def test_no_landing_marker_from_less_than_two_seconds_of_falling():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    sink(tracker, [(0, 100.0)] + descent(100_000.0, 500.0, 0.0, 1.5)[1:])
+    assert landing_markers(markers) == []
