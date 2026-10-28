@@ -94,8 +94,8 @@ ELEMENTS = {
     Layout.PAD: {PAD_ENGINE_X: "booster", PAD_THRUST_X: "thrust", PAD_THROTTLE_X: "throttle"},
 }
 MAP_FADE_SECONDS = 0.6  # the engine dial and the map swapping places; a change of arrangement takes the slower ARRANGEMENT_FADE
-RING_DELAY_SECONDS = 0.5  # the fuel ring starts to fill this long after its engine dots have started to appear
-RING_FILL_SECONDS = 1.2  # and takes this long to fill, slower than the dots
+RING_EARLY_SECONDS = 0.16  # the fuel ring starts to fill this long before its engine dots are fully there (0.2 s after they start, for the map swap)
+RING_FILL_SECONDS = 0.7  # and takes this long to fill
 FADE_OUT_SHARE = 0.4  # the first share of a change is the old element going; the rest is the new one arriving
 
 DEFAULT_MILESTONES = [Milestone("LIFTOFF", 0.0), Milestone("MAX Q", 70.0), Milestone("STAGE SEP", 143.0)]
@@ -587,9 +587,9 @@ class TelemetryBar(HudWindow):
             painter.setOpacity(base)
 
     def _ring_fill(self, now: float) -> float:
-        """How far the fuel rings of newly arrived engine dials have filled (0..1): they wait for the dots, then sweep round slowly."""
-        arrival = self._changed_at + FADE_OUT_SHARE * self._fade_seconds  # when the new dials start to appear
-        return min(max((now - arrival - RING_DELAY_SECONDS) / RING_FILL_SECONDS, 0.0), 1.0)
+        """How far the fuel rings of newly arrived engine dials have filled (0..1): they wait until the dots are all but there, then sweep round."""
+        start = self._changed_at + self._fade_seconds - RING_EARLY_SECONDS  # the dots are fully there at the end of the fade
+        return min(max((now - start) / RING_FILL_SECONDS, 0.0), 1.0)
 
     def _levels_for(self, key: str, on: int, total: int, lit: tuple[bool, ...]) -> list[float] | None:
         """How bright each engine dot is right now: each eases toward lit or dim instead of jumping."""
