@@ -169,6 +169,8 @@ def test_the_fuel_ring_of_a_newly_arrived_engine_dial_fills_later_and_slower_tha
     bar.grab()
     arrival = bar._changed_at + FADE_OUT_SHARE * MAP_FADE_SECONDS
     assert bar._ring_fill(arrival) == 0.0  # the dots start to appear, the ring has not begun
+    assert RING_DELAY_SECONDS == 0.5 and bar._ring_fill(arrival + 0.49) == 0.0  # half a second of waiting, as asked
+    assert bar._ring_fill(arrival + 0.5 + 0.1) > 0.0
     assert bar._ring_fill(arrival + RING_DELAY_SECONDS) == 0.0  # half a second later it starts
     assert 0.4 < bar._ring_fill(arrival + RING_DELAY_SECONDS + RING_FILL_SECONDS / 2) < 0.6
     assert bar._ring_fill(arrival + RING_DELAY_SECONDS + RING_FILL_SECONDS) == 1.0
