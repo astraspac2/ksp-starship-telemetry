@@ -553,7 +553,7 @@ class TelemetryBar(HudWindow):
         arrangement = Layout.PAD if self._pad else layout_for(tel.t, sep_time, tel.separated_at)  # the pad ignores Stage Sep
         upper_live = False if self._pad else staged(tel.t, tel.separated_at)
         if not upper_live:
-            self._booster.record(tel.t, (tel.fuel_fraction or 0.0, tel.engines_on, tel.engines_total, tel.engine_lit))
+            self._booster.record(tel.t, (tel.fuel_fraction or 0.0, tel.engines_on, tel.engines_total, tel.engine_lit), tel.engines_total)
         booster = self._booster.before(tel.separated_at) if upper_live else None
 
         now = time.monotonic()

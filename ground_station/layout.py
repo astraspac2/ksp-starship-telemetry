@@ -72,18 +72,27 @@ class BoosterMemory:
     """The booster's last readings, so its engine dial can hold what it showed when the stack separated.
 
     After the separation the game reports the upper stage, so the booster's own state is only known from before.
+    A reading may come with its engine count (`size`): the first count seen is the stack's own, and readings with any
+    other count (the upper stage's, or a flicker while the game switches vessels) are never taken for the booster's.
     """
 
     def __init__(self, keep_seconds: float = 3.0):
         self._keep = keep_seconds
         self._items: list[tuple[float, object]] = []
+        self._size: int | None = None
 
     def clear(self) -> None:
         self._items.clear()
+        self._size = None
 
-    def record(self, t: float, reading: object) -> None:
+    def record(self, t: float, reading: object, size: int = 0) -> None:
         if self._items and t < self._items[-1][0] - 1.0:
-            self._items.clear()  # time ran backwards (a reset), so the old readings are from another flight
+            self.clear()  # time ran backwards (a reset), so the old readings are from another flight
+        if size > 0:
+            if self._size is None:
+                self._size = size
+            elif size != self._size:
+                return
         self._items.append((t, reading))
         while self._items and self._items[0][0] < t - self._keep:
             self._items.pop(0)

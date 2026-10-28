@@ -15,6 +15,7 @@ from .live import live_telemetry
 from .mock_game import MockGame
 from .settings import Settings
 from .source import DataSource
+from .staging_trace import StagingTrace
 from .telemetry import Telemetry, mock_pad_telemetry, mock_telemetry
 from .layout import stage_sep_time
 from .separation import SeparationDetector
@@ -31,8 +32,10 @@ class Session:
         settings: Settings,
         reader_factory: Callable[..., KrpcReader] = KrpcReader,
         game_time: Callable[[], float] = time.monotonic,
+        trace: StagingTrace | None = None,
     ):
         self.settings = settings
+        self.trace = trace  # a record of what the game reported around a staging, when wanted
         self._reader_factory = reader_factory
         self.mock_game = MockGame(now=game_time)  # the mock source's stand-in for KSP's game clock
         self._reader: KrpcReader | None = None
@@ -175,6 +178,8 @@ class Session:
             self.t = telemetry.t
             self._watch_game(status, telemetry)
         separated = self.separation.update(telemetry.t, telemetry.engines_total, telemetry.status is None)
+        if self.trace is not None and self.source is DataSource.LIVE:
+            self.trace.add(telemetry.t, telemetry.engines_total, telemetry.engines_on, separated, telemetry.status)
         telemetry = replace(telemetry, separated_at=None if self.pad_mode else separated)  # the pad has no stage separation
         if self.clock.state is ClockState.ABORTED:
             telemetry = replace(telemetry, status=ABORT_STATUS)

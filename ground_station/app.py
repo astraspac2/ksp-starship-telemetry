@@ -14,6 +14,7 @@ from .pill import MARGIN as PILL_MARGIN
 from .pill import PillWidget
 from .session import Session
 from .single_instance import acquire_or_explain
+from .staging_trace import StagingTrace
 from .theme import THEMES
 
 PANEL_REFRESH_MS = 250
@@ -45,7 +46,7 @@ class GroundStationApp:
     def __init__(self, argv: list[str]):
         self.app = QApplication(argv)
         load_bundled_fonts()
-        self.session = Session(settings_io.load())
+        self.session = Session(settings_io.load(), trace=StagingTrace(settings_io.default_path().with_name("staging-trace.csv")))
         self.pill = PillWidget(subtitle=self.session.settings.mission_label)
         self.bar = TelemetryBar(subtitle=self.session.settings.mission_label, milestones=self.session.milestones())
         self._scale_placed = None  # the HUD scale and view the windows were last positioned for

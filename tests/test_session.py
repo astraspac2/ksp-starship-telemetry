@@ -346,3 +346,26 @@ def test_switching_source_forgets_a_question_that_was_waiting():
     assert session.pending_node is not None
     session.set_source(DataSource.MOCK)
     assert session.pending_node is None
+
+
+class _TraceStub:
+    def __init__(self):
+        self.rows = []
+
+    def add(self, *row):
+        self.rows.append(row)
+
+
+def test_a_live_session_feeds_the_staging_trace_and_a_demo_source_does_not():
+    session = make_session()
+    session.trace = _TraceStub()
+    session.connect()
+    FakeReader.instances[0].status = ReaderStatus(
+        ConnState.CONNECTED, LiveSample(100.0, 7000.0, 50_000.0, 0.5, 0.0, 6, 6, "flying", 0.0, ut=1000.0), 0.0, None
+    )
+    session.telemetry()
+    assert len(session.trace.rows) == 1 and session.trace.rows[0][1:3] == (6, 6)
+    demo = make_session(source="MOCK")
+    demo.trace = _TraceStub()
+    demo.telemetry()
+    assert demo.trace.rows == []
