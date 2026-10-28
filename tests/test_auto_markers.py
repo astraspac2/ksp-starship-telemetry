@@ -1,6 +1,7 @@
 import pytest
 
 from ground_station.auto_markers import (
+    LANDING,
     NODE,
     NODE_STABLE_SECONDS,
     REENTRY,
@@ -205,3 +206,81 @@ def test_markers_round_trip_through_the_settings_and_bad_rows_are_skipped():
     rows = auto_markers_to_dicts(markers) + [{"name": "", "time": 1, "kind": NODE}, {"name": "x", "time": "nan", "kind": NODE}, {"name": "y", "time": 1, "kind": "other"}, 5]
     assert auto_markers_from_dicts(rows) == markers
     assert auto_markers_from_dicts("nonsense") == []
+
+
+def landing_markers(markers):
+    return [m for m in markers if m.kind == LANDING]
+
+
+def sink(tracker, readings, t0=1000.0):
+    """Feed (seconds, kilometres) readings; flight clock and game time both advance with the seconds."""
+    for seconds, km in readings:
+        tracker.update(float(seconds), t0 + seconds, 5000.0 + seconds, (), km, None)
+
+
+def test_landing_burn_is_marked_when_800_m_is_crossed_on_the_way_down():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    sink(tracker, [(0, 0.1), (60, 25.0), (120, 40.0), (200, 20.0), (260, 3.0), (270, 1.0), (272, 0.79)])
+    assert [(m.name, m.time) for m in landing_markers(markers)] == [("Landing burn", 1272.0)]
+
+
+def test_landing_burn_is_predicted_from_the_sink_rate_below_10_km_and_set_at_the_real_crossing():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    sink(tracker, [(0, 30.0), (95, 11.0), (96, 10.0), (97, 9.0), (98, 8.0), (99, 7.0), (100, 6.0)])
+    # sinking 1 km per second: 6 km now, 800 m is 5.2 s away
+    assert [m.time for m in landing_markers(markers)] == [1105.2]
+    sink(tracker, [(105, 1.0), (106, 0.7)])
+    assert [m.time for m in landing_markers(markers)] == [1106.0]  # the real crossing
+
+
+def test_nothing_is_predicted_while_still_high_up():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    sink(tracker, [(0, 60.0), (10, 50.0), (20, 40.0), (30, 30.0), (40, 20.0), (50, 11.0)])
+    assert landing_markers(markers) == []
+
+
+def test_a_launch_through_800_m_is_not_a_landing_burn():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    sink(tracker, [(0, 0.0), (10, 0.5), (20, 0.9), (30, 3.0), (60, 9.0)])
+    assert landing_markers(markers) == []
+
+
+def test_a_low_hop_that_never_got_above_10_km_is_not_marked():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    sink(tracker, [(0, 0.0), (20, 6.0), (40, 8.0), (60, 4.0), (80, 1.0), (85, 0.7)])
+    assert landing_markers(markers) == []
+
+
+def test_the_landing_marker_is_not_made_again_after_the_crossing():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    sink(tracker, [(0, 20.0), (50, 5.0), (60, 0.7)])
+    sink(tracker, [(70, 0.5), (80, 0.3), (90, 0.4), (100, 0.2)])
+    assert [m.time for m in landing_markers(markers)] == [1060.0]
+
+
+def test_a_deleted_landing_marker_stays_deleted_for_that_flight():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    sink(tracker, [(0, 20.0), (50, 9.0), (52, 8.0), (54, 7.0)])
+    assert len(landing_markers(markers)) == 1
+    markers.clear()
+    sink(tracker, [(56, 6.0), (58, 5.0), (60, 4.0), (70, 0.7)])
+    assert landing_markers(markers) == []
+
+
+def test_a_new_flight_reuses_the_old_landing_marker():
+    markers = [AutoMarker("Landing burn", 100.0, LANDING)]
+    tracker = AutoMarkerTracker(markers)
+    sink(tracker, [(0, 20.0), (50, 5.0), (60, 0.7)])
+    assert len(markers) == 1 and markers[0].time == 1060.0
+
+
+def test_the_landing_marker_round_trips_through_the_settings():
+    markers = [AutoMarker("Landing burn", 1060.0, LANDING)]
+    assert auto_markers_from_dicts(auto_markers_to_dicts(markers)) == markers

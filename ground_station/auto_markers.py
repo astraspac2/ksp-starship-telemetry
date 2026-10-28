@@ -8,10 +8,16 @@ Two kinds:
            (so a suborbital flight counts, a low hop does not). Once the path dips into the atmosphere the marker is
            placed at the predicted moment, and when 70 km is really crossed on the way down it is set to that moment.
 
+  landing  LANDING BURN, when the vessel coming down passes 800 m (above the ground, or above sea level if that is the chosen
+           altitude). It only works after the vessel has been above 10 km. Once it is falling through the last
+           stretch the marker is placed at the predicted moment from how fast it is sinking, and when 800 m is really
+           crossed it is set to that moment.
+
 Nothing here sends anything to the game.
 """
 
 import math
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Sequence
 
@@ -22,15 +28,24 @@ REENTRY_ALTITUDE_KM = 70.0  # the marker arms once the vessel is above this, and
 REENTRY_NAME = "Re-entry"
 REENTRY_MOVED_SECONDS = 0.5
 
+LANDING_BURN_ALTITUDE_M = 800.0  # Starship lights its engines for the landing burn at about this height
+LANDING_ARM_KM = 10.0  # the marker arms once the vessel has been above this
+LANDING_PREDICT_KM = 10.0  # the sink rate is only trusted for a prediction below this
+LANDING_NAME = "Landing burn"
+LANDING_MOVED_SECONDS = 0.5
+LANDING_RATE_WINDOW = 5.0  # game seconds of readings the sink rate is measured over
+LANDING_RATE_MIN_SPAN = 1.0
+
 NODE = "node"
 REENTRY = "reentry"
+LANDING = "landing"
 
 
 @dataclass
 class AutoMarker:
     name: str
     time: float  # seconds relative to liftoff
-    kind: str  # NODE or REENTRY
+    kind: str  # NODE, REENTRY or LANDING
     enabled: bool = True
     node_ut: float | None = field(default=None, compare=False)  # the node it follows, while that node still exists
 
@@ -56,7 +71,7 @@ def auto_markers_from_dicts(rows) -> list[AutoMarker]:
             kind = str(row["kind"])
         except (KeyError, TypeError, ValueError):
             continue
-        if name and math.isfinite(time) and kind in (NODE, REENTRY):
+        if name and math.isfinite(time) and kind in (NODE, REENTRY, LANDING):
             markers.append(AutoMarker(name, time, kind, bool(row.get("enabled", True))))
     return markers
 
@@ -80,6 +95,10 @@ class AutoMarkerTracker:
         self._suppressed = False  # the operator deleted the marker; leave it deleted
         self._reentry: AutoMarker | None = None
         self._last_altitude: float | None = None
+        self._landing_armed = False
+        self._landing_suppressed = False
+        self._landing: AutoMarker | None = None
+        self._sinking: deque[tuple[float, float]] = deque()  # (game time, metres) while the vessel is falling
 
     def take_changed(self) -> bool:
         changed, self._changed = self._changed, False
@@ -93,6 +112,9 @@ class AutoMarkerTracker:
         self._armed = self._suppressed = False
         self._reentry = None
         self._last_altitude = None
+        self._landing_armed = self._landing_suppressed = False
+        self._landing = None
+        self._sinking.clear()
         for marker in self.markers:
             marker.node_ut = None
 
@@ -128,6 +150,7 @@ class AutoMarkerTracker:
         if ut is None:
             return
         self._follow_nodes(wall, t, ut, sorted(u for u in node_uts if u > ut))
+        self._watch_landing(t, ut, altitude_km)  # reads the previous altitude, so it goes before the re-entry watch
         self._watch_reentry(t, ut, altitude_km, reentry_ut)
 
     def _follow_nodes(self, wall: float, t: float, ut: float, nodes: list[float]) -> None:
@@ -195,4 +218,46 @@ class AutoMarkerTracker:
             self._changed = True
         elif abs(self._reentry.time - time) > REENTRY_MOVED_SECONDS:
             self._reentry.time = time
+            self._changed = True
+
+    def _watch_landing(self, t: float, ut: float, altitude_km: float | None) -> None:
+        if self._landing is not None and self._landing not in self.markers:
+            self._landing, self._landing_suppressed = None, True  # taken off the list by the operator
+        if altitude_km is None or not math.isfinite(altitude_km):
+            return
+        metres = altitude_km * 1000.0
+        if altitude_km > LANDING_ARM_KM and not self._landing_armed:  # every climb above 10 km is a new flight
+            self._landing_armed, self._landing_suppressed = True, False
+        previous = self._last_altitude
+        falling = previous is not None and altitude_km < previous
+        if not self._landing_armed or not falling:
+            self._sinking.clear()
+            return
+        if metres <= LANDING_BURN_ALTITUDE_M:
+            self._place_landing(t)  # 800 m crossed on the way down
+            self._landing_armed = False
+            self._sinking.clear()
+            return
+        self._sinking.append((ut, metres))
+        while self._sinking and ut - self._sinking[0][0] > LANDING_RATE_WINDOW:
+            self._sinking.popleft()
+        first_ut, first_metres = self._sinking[0]
+        if altitude_km > LANDING_PREDICT_KM or ut - first_ut < LANDING_RATE_MIN_SPAN:
+            return
+        rate = (first_metres - metres) / (ut - first_ut)
+        if rate > 0:
+            self._place_landing(t + (metres - LANDING_BURN_ALTITUDE_M) / rate)
+
+    def _place_landing(self, time: float) -> None:
+        time = round(time, 1)
+        if self._landing_suppressed:
+            return
+        if self._landing is None:  # one from an earlier flight, kept in the settings, is reused
+            self._landing = next((m for m in self.markers if m.kind == LANDING), None)
+        if self._landing is None:
+            self._landing = AutoMarker(LANDING_NAME, time, LANDING)
+            self.markers.append(self._landing)
+            self._changed = True
+        elif abs(self._landing.time - time) > LANDING_MOVED_SECONDS:
+            self._landing.time = time
             self._changed = True
