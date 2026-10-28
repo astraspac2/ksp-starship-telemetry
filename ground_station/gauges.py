@@ -202,14 +202,16 @@ def draw_engine_cluster(
     lit: tuple[bool, ...] = (),
     grow: float = 1.0,
     levels: list[float] | None = None,
+    ring: float | None = None,
 ) -> None:
     """Engine dots inside the current stage's fuel ring. Lit engines are bright, the rest dim.
 
     `lit` says which dot is which engine; without it the first `engines_on` dots are lit. `grow` (0..1) draws the
     cluster in: the ring sweeps round and the dots swell from nothing. `levels` (0 dim .. 1 lit, per dot) overrides
-    `lit`, so a dot can be part way between the two while it fades.
+    `lit`, so a dot can be part way between the two while it fades. `ring` (0..1) is how far the fuel ring has filled;
+    it follows `grow` unless given, so the ring can fill later and slower than the dots appear.
     """
-    _arc(painter, center, radius, fuel_fraction * grow, theme, theme.ring_width + 1.2)
+    _arc(painter, center, radius, fuel_fraction * (grow if ring is None else ring), theme, theme.ring_width + 1.2)
     inner_ring = QColor(theme.soft)
     inner_ring.setAlpha(70)
     painter.setPen(QPen(inner_ring, 1.0))

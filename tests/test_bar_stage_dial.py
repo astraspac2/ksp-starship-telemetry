@@ -153,3 +153,37 @@ def test_the_engine_dial_and_the_map_swap_faster_than_a_change_of_arrangement(qa
     bar.set_telemetry(mock_telemetry(140.0, 143.0))  # now the stage-sep arrangement comes in
     bar.grab()
     assert bar._fade_seconds == ARRANGEMENT_FADE
+
+
+def test_the_fuel_ring_of_a_newly_arrived_engine_dial_fills_later_and_slower_than_its_dots(qapp):
+    from ground_station.bar import FADE_OUT_SHARE, MAP_FADE_SECONDS, RING_DELAY_SECONDS, RING_FILL_SECONDS
+
+    bar = TelemetryBar()
+    bar.set_smoothing(False)
+    bar.set_telemetry(mock_telemetry(60.0, 143.0))
+    bar.set_show_map(True)
+    bar.grab()
+    bar._changed_at -= 5.0
+    bar.grab()
+    bar.set_show_map(False)  # the engine dial comes back
+    bar.grab()
+    arrival = bar._changed_at + FADE_OUT_SHARE * MAP_FADE_SECONDS
+    assert bar._ring_fill(arrival) == 0.0  # the dots start to appear, the ring has not begun
+    assert bar._ring_fill(arrival + RING_DELAY_SECONDS) == 0.0  # half a second later it starts
+    assert 0.4 < bar._ring_fill(arrival + RING_DELAY_SECONDS + RING_FILL_SECONDS / 2) < 0.6
+    assert bar._ring_fill(arrival + RING_DELAY_SECONDS + RING_FILL_SECONDS) == 1.0
+    assert RING_FILL_SECONDS > (1 - FADE_OUT_SHARE) * MAP_FADE_SECONDS  # slower than the dots take to arrive
+
+
+def test_a_dial_that_did_not_change_keeps_its_full_ring(qapp):
+    bar = TelemetryBar()
+    bar.set_smoothing(False)
+    bar.set_telemetry(mock_telemetry(60.0, 143.0))
+    bar.set_show_map(False)
+    bar.grab()
+    bar.set_show_map(True)
+    bar.grab()
+    assert 953.0 not in bar._arrived and bar._arrived  # only the dial that swapped is in the slow fill
+    bar.set_view_mode("pad")
+    bar.grab()
+    assert bar._arrived == set()  # a fresh bar is simply there

@@ -94,6 +94,8 @@ ELEMENTS = {
     Layout.PAD: {PAD_ENGINE_X: "booster", PAD_THRUST_X: "thrust", PAD_THROTTLE_X: "throttle"},
 }
 MAP_FADE_SECONDS = 0.6  # the engine dial and the map swapping places; a change of arrangement takes the slower ARRANGEMENT_FADE
+RING_DELAY_SECONDS = 0.5  # the fuel ring starts to fill this long after its engine dots have started to appear
+RING_FILL_SECONDS = 1.2  # and takes this long to fill, slower than the dots
 FADE_OUT_SHARE = 0.4  # the first share of a change is the old element going; the rest is the new one arriving
 
 DEFAULT_MILESTONES = [Milestone("LIFTOFF", 0.0), Milestone("MAX Q", 70.0), Milestone("STAGE SEP", 143.0)]
@@ -135,6 +137,7 @@ class TelemetryBar(HudWindow):
         self._shown_arrangement: Layout | None = None
         self._changed_at = 0.0
         self._fade_seconds = ARRANGEMENT_FADE
+        self._arrived: set[float] = set()  # positions whose dial is new in the change under way: their fuel rings fill in slowly
         self.model_triangles = 0
         self._renderer: ModelRenderer
         self.set_vessel_model("")  # the built-in rocket until a model is chosen
@@ -566,20 +569,27 @@ class TelemetryBar(HudWindow):
             self._previous, self._shown, self._changed_at = self._shown, kinds, now
             self._previous_arrangement, self._shown_arrangement = self._shown_arrangement, arrangement
             self._fade_seconds = MAP_FADE_SECONDS if self._previous_arrangement is arrangement else ARRANGEMENT_FADE
+            self._arrived = {x for x, k in kinds.items() if self._previous is not None and self._previous.get(x) != k}
         progress = fade_progress(now, self._changed_at, self._fade_seconds)
+        ring_fill = self._ring_fill(now)
         base = painter.opacity()
         for x, kind in kinds.items():
             old = self._previous.get(x) if self._previous is not None and progress < 1.0 else kind
             if old == kind:
-                self._draw_element(painter, tel, kind, x, arrangement, upper_live, booster, 1.0)
+                self._draw_element(painter, tel, kind, x, arrangement, upper_live, booster, 1.0, ring_fill if x in self._arrived else 1.0)
             elif progress < FADE_OUT_SHARE:
                 painter.setOpacity(base * (1.0 - progress / FADE_OUT_SHARE))
                 self._draw_element(painter, tel, old, x, self._previous_arrangement or arrangement, upper_live, booster, 1.0)
             else:
                 arriving = (progress - FADE_OUT_SHARE) / (1.0 - FADE_OUT_SHARE)
                 painter.setOpacity(base * arriving)
-                self._draw_element(painter, tel, kind, x, arrangement, upper_live, booster, arriving)
+                self._draw_element(painter, tel, kind, x, arrangement, upper_live, booster, arriving, ring_fill)
             painter.setOpacity(base)
+
+    def _ring_fill(self, now: float) -> float:
+        """How far the fuel rings of newly arrived engine dials have filled (0..1): they wait for the dots, then sweep round slowly."""
+        arrival = self._changed_at + FADE_OUT_SHARE * self._fade_seconds  # when the new dials start to appear
+        return min(max((now - arrival - RING_DELAY_SECONDS) / RING_FILL_SECONDS, 0.0), 1.0)
 
     def _levels_for(self, key: str, on: int, total: int, lit: tuple[bool, ...]) -> list[float] | None:
         """How bright each engine dot is right now: each eases toward lit or dim instead of jumping."""
@@ -624,6 +634,7 @@ class TelemetryBar(HudWindow):
         upper_live: bool,
         booster: tuple | None,
         grow: float,
+        ring: float = 1.0,
     ) -> None:
         """One dial at one position. `grow` (0..1) is how far an engine cluster has drawn itself in."""
         theme = self._theme
@@ -637,13 +648,13 @@ class TelemetryBar(HudWindow):
                 fuel, on, total, lit = booster or (0.0, 0, BOOSTER_ENGINES, (False,) * BOOSTER_ENGINES)
             else:
                 fuel, on, total, lit = tel.fuel_fraction or 0.0, tel.engines_on, tel.engines_total, tel.engine_lit
-            draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit))
+            draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit), ring)
         elif kind == "ship_engines":
             if upper_live or arrangement is Layout.FLIGHT:
                 fuel, on, total, lit = tel.fuel_fraction or 0.0, tel.engines_on, tel.engines_total, tel.engine_lit
             else:  # the ship's own readings are not available until it is the vessel being flown
                 fuel, on, total, lit = 0.0, 0, UPPER_STAGE_ENGINES, (False,) * UPPER_STAGE_ENGINES
-            draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit))
+            draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit), ring)
         elif kind == "dial":
             draw_attitude_dial(painter, centre, DIAL_RADIUS, tel.pitch_deg, theme, self._rocket_image(tel))
         elif kind == "speed":
