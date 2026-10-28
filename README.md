@@ -80,7 +80,7 @@ Editing your kOS script so its events land at fixed times makes it even more acc
 
 ## Status
 
-The launch bar, static-fire bar, engine dial (all four cluster modes), stage-separation detection, 3D dial, map and timeline have been used in real launches and a static fire. The maneuver-node prompt and the RE-ENTRY marker are tested with simulated data only and have not been flown yet.
+The launch bar, static-fire bar, engine dial (all four cluster modes), stage-separation detection, 3D dial, map, timeline, maneuver-node prompt and RE-ENTRY marker have all been used in real launches and a static fire.
 
 **Not made yet:** the booster's boostback burn and landing. After stage separation the overlay follows the ship only.
 
