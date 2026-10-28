@@ -419,3 +419,65 @@ def test_the_panel_has_four_tabs_and_the_manual_notes_and_panel_look_moved_into_
     assert [panel._tabs.tabText(i) for i in range(panel._tabs.count())] == ["Mission && Timeline", "HUD", "Data && Test", "Looks"]
     assert panel._tabs.widget(0).isAncestorOf(panel._marker_text)
     assert panel._tabs.widget(3).isAncestorOf(panel._panel_theme)
+
+
+def _picture(tmp_path, colour):
+    from PySide6.QtGui import QColor, QPixmap
+
+    path = tmp_path / "background.png"
+    pixmap = QPixmap(64, 40)
+    pixmap.fill(QColor(colour))
+    assert pixmap.save(str(path))
+    return str(path)
+
+
+def test_every_panel_look_paints_without_failing(panel):
+    for index in range(len(settings_io.PANEL_THEMES)):
+        panel._panel_theme.setCurrentIndex(index)
+        assert not panel.grab().isNull()
+
+
+def test_a_chosen_picture_is_used_saved_and_switches_to_my_own_picture_look(panel, tmp_path):
+    path = _picture(tmp_path, "#ff0000")
+    panel._set_panel_image(path)
+    assert panel.session.settings.panel_theme == "custom" and panel.session.settings.panel_image == path
+    saved = settings_io.load(panel.saved)
+    assert saved.panel_theme == "custom" and saved.panel_image == path
+    panel._panel_dim.setValue(0)  # no darkening: the picture's own colour shows through behind the header
+    image = panel.grab().toImage()
+    pixel = image.pixelColor(2, 300)  # the left margin, which has no controls over it
+    assert pixel.red() > 150 and pixel.green() < 80
+
+
+def test_darkening_the_picture_makes_it_darker(panel, tmp_path):
+    panel._set_panel_image(_picture(tmp_path, "#ff0000"))
+    panel._panel_dim.setValue(0)
+    bright = panel.grab().toImage().pixelColor(2, 300).red()
+    panel._panel_dim.setValue(80)
+    dark = panel.grab().toImage().pixelColor(2, 300).red()
+    assert dark < bright - 100
+    assert settings_io.load(panel.saved).panel_image_dim == 80
+
+
+def test_a_file_that_is_not_a_picture_is_refused_and_not_saved(panel, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    warned = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: warned.append(args))
+    bad = tmp_path / "not-a-picture.png"
+    bad.write_text("hello")
+    panel._set_panel_image(str(bad))
+    assert warned and panel.session.settings.panel_image == "" and panel.session.settings.panel_theme == "aerospace"
+
+
+def test_my_own_picture_look_with_no_picture_still_paints_a_plain_window(panel):
+    index = settings_io.PANEL_THEMES.index("custom")
+    panel._panel_theme.setCurrentIndex(index)
+    assert panel.session.settings.panel_image == ""
+    assert panel.grab().toImage().pixelColor(2, 300).alpha() == 255
+
+
+def test_clearing_the_picture_keeps_the_look_but_forgets_the_file(panel, tmp_path):
+    panel._set_panel_image(_picture(tmp_path, "#00ff00"))
+    panel._set_panel_image("")
+    assert panel.session.settings.panel_image == "" and settings_io.load(panel.saved).panel_image == ""

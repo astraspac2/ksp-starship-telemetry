@@ -14,7 +14,7 @@ from .units import ALTITUDE_UNITS, SPEED_UNITS, THRUST_UNITS
 REFRESH_HZ = (20, 30, 60)
 WARP_POLICIES = ("follow", "hold")  # countdown follows game time through time warp, or holds while warping
 THEMES = ("A - Starship-accurate", "B - Glass", "C - Mission control", "D - Forest")
-PANEL_THEMES = ("aerospace", "forest")
+PANEL_THEMES = ("aerospace", "forest", "deepspace", "mars", "custom")
 BACKGROUNDS = ("transparent", "solid")
 ALTITUDE_MODES = ("surface", "sea")  # above the ground/sea, or above sea level
 VIEW_MODES = ("flight", "pad")  # the bar for a flight, or for the pad and a static fire
@@ -69,6 +69,8 @@ class Settings:
     # looks
     theme: str = THEMES[0]
     panel_theme: str = PANEL_THEMES[0]
+    panel_image: str = ""  # the control panel's own background picture, used by the "custom" look
+    panel_image_dim: int = 55  # how much that picture is darkened, per cent, so the controls stay readable
 
     @property
     def mission_label(self) -> str:
@@ -119,7 +121,8 @@ class Settings:
         within("countdown_seconds", 1, 24 * 3600)
         within("hud_scale", 0.5, 2.0)
         within("timeline_nodes", 1, 20)
-        for name in ("address", "subtitle", "pad_subtitle", "font", "vessel_model", "accent", "background_color"):
+        within("panel_image_dim", 0, 90)
+        for name in ("address", "subtitle", "pad_subtitle", "font", "vessel_model", "accent", "background_color", "panel_image"):
             text(name)
         for name in ("auto_connect", "show_pill", "show_bar", "on_top", "click_through", "show_badge", "show_map", "show_timeline", "vessel_model_flip", "starship_model"):
             flag(name)

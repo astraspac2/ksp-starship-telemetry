@@ -44,6 +44,7 @@ from .events import Event, event_status, format_clock_text, parse_clock, sorted_
 from .forest_art import render_forest
 from .krpc_source import ConnState
 from .mesh import ModelError, load_mesh, normalize
+from .panel_backdrops import BACKDROP_THEMES, render_backdrop
 from .mock_game import WARP_RATES
 from .session import Session
 from .settings import ALTITUDE_MODES, BACKGROUNDS, PANEL_THEMES, REFRESH_HZ, VIEW_MODES, WARP_POLICIES
@@ -120,7 +121,31 @@ PALETTES = {
         "header_a": "rgba(14,52,32,225)", "header_b": "rgba(3,16,10,200)",
     },
 }
-PANEL_THEME_LABELS = {"aerospace": "Aerospace dark", "forest": "Forest at dusk"}
+PALETTES["deepspace"] = {
+    "bg": "transparent", "bar_bg": "rgba(4,4,16,220)", "text": "#e8e6fb", "border": "#463d86", "panel": "rgba(8,8,26,205)",
+    "panel_alt": "rgba(14,12,36,205)", "title": "#b9b2e8", "button": "rgba(26,22,62,225)", "button_border": "#5b4fb0",
+    "hover": "rgba(54,44,120,235)", "accent": "#b58cff", "grid": "#2c2760", "disabled": "#6d689a",
+    "group_bg": "rgba(6,6,20,150)", "pane_bg": "rgba(6,6,20,110)", "header_a": "rgba(40,28,92,225)", "header_b": "rgba(8,8,26,205)",
+}
+PALETTES["mars"] = {
+    "bg": "transparent", "bar_bg": "rgba(20,8,5,220)", "text": "#fbece2", "border": "#8a4224", "panel": "rgba(30,12,8,205)",
+    "panel_alt": "rgba(42,18,10,205)", "title": "#f0bf9f", "button": "rgba(66,28,16,225)", "button_border": "#b5532a",
+    "hover": "rgba(110,48,26,235)", "accent": "#ff9a62", "grid": "#5a2a18", "disabled": "#9a7766",
+    "group_bg": "rgba(24,9,6,150)", "pane_bg": "rgba(24,9,6,110)", "header_a": "rgba(96,42,22,225)", "header_b": "rgba(30,12,8,205)",
+}
+PALETTES["custom"] = {  # over the operator's own picture: translucent dark panels so it shows through
+    "bg": "transparent", "bar_bg": "rgba(5,8,14,220)", "text": "#eef3f8", "border": "rgba(255,255,255,80)", "panel": "rgba(8,12,20,195)",
+    "panel_alt": "rgba(14,20,30,195)", "title": "#c5d3e0", "button": "rgba(20,30,44,220)", "button_border": "rgba(255,255,255,100)",
+    "hover": "rgba(50,70,100,235)", "accent": "#7cc8ff", "grid": "rgba(255,255,255,40)", "disabled": "#7f8c99",
+    "group_bg": "rgba(6,10,16,85)", "pane_bg": "rgba(6,10,16,35)", "header_a": "rgba(18,28,44,200)", "header_b": "rgba(6,10,18,195)",
+}
+PANEL_THEME_LABELS = {
+    "aerospace": "Aerospace dark",
+    "forest": "Forest at dusk",
+    "deepspace": "Deep space",
+    "mars": "Mars dusk",
+    "custom": "My own picture",
+}
 ACCENT_SWATCHES = [("Moss", "#8FD694"), ("Ice", "#5CB6FF"), ("Amber", "#FFB030"), ("Rose", "#FF7A90"), ("White", "#FFFFFF")]
 
 
@@ -131,6 +156,7 @@ def build_style(panel_theme: str) -> str:
     return sheet
 
 
+PLAIN_BACKDROP = "#0b121a"  # behind the controls when the chosen look has no picture to paint
 GREEN, AMBER, RED, GREY = "#3ddc84", "#ffb030", "#ff5148", "#6b7a88"
 CHIP = "color: #0b121a; font-weight: bold; padding: 2px 10px; border-radius: 10px;"  # a small coloured label
 WARP_LABELS = ["Follow game time through time warp (default)", "Hold the countdown during time warp"]
@@ -210,9 +236,17 @@ class ControlPanel(QMainWindow):
 
     # the forest picture behind everything
     def paintEvent(self, event) -> None:
-        if self._session.settings.panel_theme == "forest":
+        s = self._session.settings
+        if s.panel_theme == "forest" or s.panel_theme in BACKDROP_THEMES:
             if self._forest_cache is None or self._forest_cache.size() != self.size():
-                self._forest_cache = render_forest(self.width(), self.height())
+                if s.panel_theme == "forest":
+                    self._forest_cache = render_forest(self.width(), self.height())
+                else:
+                    picture = render_backdrop(s.panel_theme, self.width(), self.height(), s.panel_image, s.panel_image_dim)
+                    if picture is None:  # "my own picture" with no readable picture yet: a plain dark window
+                        picture = QPixmap(max(self.width(), 1), max(self.height(), 1))
+                        picture.fill(QColor(PLAIN_BACKDROP))
+                    self._forest_cache = picture
             painter = QPainter(self)
             painter.drawPixmap(0, 0, self._forest_cache)
         else:
@@ -687,9 +721,29 @@ class ControlPanel(QMainWindow):
         self._panel_theme.addItems([PANEL_THEME_LABELS[p] for p in PANEL_THEMES])
         self._panel_theme.currentIndexChanged.connect(self._store_panel_theme)
         form.addRow("Theme", self._panel_theme)
+        picture_row = QHBoxLayout()
+        self._panel_image_label = QLabel("")
+        choose = QPushButton("Choose picture...")
+        choose.clicked.connect(self._browse_panel_image)
+        clear = QPushButton("Clear")
+        clear.clicked.connect(lambda: self._set_panel_image(""))
+        picture_row.addWidget(self._panel_image_label, 1)
+        picture_row.addWidget(choose)
+        picture_row.addWidget(clear)
+        form.addRow("Background picture", picture_row)
+        self._panel_dim = QSlider(Qt.Horizontal)
+        self._panel_dim.setRange(0, 90)
+        self._panel_dim.setToolTip("How much the picture is darkened so the controls stay easy to read.")
+        self._panel_dim_label = QLabel("")
+        self._panel_dim.valueChanged.connect(self._store_panel_dim)
+        dim_row = QHBoxLayout()
+        dim_row.addWidget(self._panel_dim, 1)
+        dim_row.addWidget(self._panel_dim_label)
+        form.addRow("Darken picture", dim_row)
         note = QLabel(
-            "Aerospace dark is the plain mission-control look. Forest at dusk puts a painted pine forest behind the "
-            "controls: moonlight, mist and fireflies. It changes only how this window looks, not the telemetry."
+            "Aerospace dark is the plain mission-control look. Forest, Deep space and Mars dusk are painted scenes. "
+            "My own picture uses any image you choose (PNG, JPG, BMP or WebP). It changes only how this window looks, "
+            "not the telemetry."
         )
         note.setWordWrap(True)
         form.addRow(note)
@@ -756,6 +810,9 @@ class ControlPanel(QMainWindow):
         self._events_box.setTitle(EVENTS_TITLES[s.view_mode])
         self._warp.setCurrentIndex(WARP_POLICIES.index(s.warp_policy))
         self._panel_theme.setCurrentIndex(PANEL_THEMES.index(s.panel_theme))
+        self._panel_image_label.setText(s.panel_image or "none chosen")
+        self._panel_dim.setValue(s.panel_image_dim)
+        self._panel_dim_label.setText(f"{s.panel_image_dim} %")
         self._speed_unit.setCurrentIndex(SPEED_UNITS.index(s.speed_unit))
         self._altitude_unit.setCurrentIndex(ALTITUDE_UNITS.index(s.altitude_unit))
         self._thrust_unit.setCurrentIndex(THRUST_UNITS.index(s.thrust_unit))
@@ -938,6 +995,40 @@ class ControlPanel(QMainWindow):
             return
         self._session.settings.panel_theme = PANEL_THEMES[self._panel_theme.currentIndex()]
         self._apply_panel_theme()
+        self._save()
+
+    def _browse_panel_image(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choose a background picture", "", "Pictures (*.png *.jpg *.jpeg *.bmp *.webp)"
+        )
+        if path:
+            self._set_panel_image(path)
+
+    def _set_panel_image(self, path: str) -> None:
+        """Use this picture behind the panel (and switch to that look). One that cannot be read is refused and not saved."""
+        if path and QPixmap(path).isNull():
+            QMessageBox.warning(self, "Background picture", f"That file could not be read as a picture:\n{path}")
+            return
+        s = self._session.settings
+        s.panel_image = path
+        if path:
+            s.panel_theme = "custom"
+        self._syncing = True
+        try:
+            self._panel_theme.setCurrentIndex(PANEL_THEMES.index(s.panel_theme))
+            self._panel_image_label.setText(path or "none chosen")
+        finally:
+            self._syncing = False
+        self._apply_panel_theme()
+        self._save()
+
+    def _store_panel_dim(self, value: int) -> None:
+        self._panel_dim_label.setText(f"{value} %")
+        if self._syncing:
+            return
+        self._session.settings.panel_image_dim = value
+        self._forest_cache = None
+        self.update()
         self._save()
 
     # colours, opacity, look
