@@ -168,6 +168,7 @@ class FakeConn:
         sep_mode: str = "Outer Twenty",
         sep_thrust: str = "18903.29",
         dead_first_module: bool = False,
+        sep_missing_fields: tuple[str, ...] = (),
         fuel_burn_rate: float = 0.0,
         node_uts: tuple[float, ...] = (),
         orbit_km: tuple[float, float] = (-6000.0, 80.0),
@@ -213,8 +214,16 @@ class FakeConn:
             # 33 while kRPC reads only its 20-engine first group; the core's 13 nozzles are a
             # 1 kN placeholder.
             fields = {"Thrust": sep_thrust, "Mode": sep_mode}
+            for gone in sep_missing_fields:  # another version of the mod, without that field
+                del fields[gone]
             self.sep_fields = fields  # a test can change the mode or the part window's thrust while the reader runs
-            switch = SimpleNamespace(name="ModuleSEPEngineSwitch", get_field=lambda name: fields[name])
+
+            def get_field(name):
+                if name not in fields:
+                    raise RuntimeError("Sequence contains no matching element")  # what kRPC's GetField answers
+                return fields[name]
+
+            switch = SimpleNamespace(name="ModuleSEPEngineSwitch", get_field=get_field)
             if dead_first_module:
                 # With the outer engines switched off, the module kRPC reads reports nothing at all: no
                 # thrust, no rating, no propellants and not even "active".
@@ -541,5 +550,40 @@ def test_zero_throttle_means_zero_thrust():
         time.sleep(0.4)
         sample = reader.snapshot().sample
         assert sample.thrust_n == 0.0 and sample.throttle == 0.0
+    finally:
+        reader.stop()
+
+
+@pytest.mark.parametrize("missing", [("Thrust", "Mode"), ("Mode",), ("Thrust",)])
+def test_a_mod_version_without_the_switch_fields_does_not_drop_the_connection(missing):
+    """Seen with another version of the booster mod: kRPC answered "Sequence contains no matching element" and the reader went to SIGNAL LOST."""
+    reader = make_reader(lambda: FakeConn(sep_booster=True, sep_missing_fields=missing))
+    reader.start()
+    try:
+        assert wait_for(lambda: reader.snapshot().sample is not None)
+        time.sleep(0.3)
+        status = reader.snapshot()
+        assert status.state is ConnState.CONNECTED and status.error is None
+        assert status.sample.engines_total == 33 and status.sample.engines_on == 33  # the first group burns, so every ring inside it does
+    finally:
+        reader.stop()
+
+
+def test_without_the_switch_fields_a_cluster_that_is_not_burning_shows_dim():
+    reader = make_reader(lambda: FakeConn(sep_booster=True, sep_missing_fields=("Thrust", "Mode"), dead_first_module=True))
+    reader.start()
+    try:
+        assert wait_for(lambda: reader.snapshot().sample is not None)
+        sample = reader.snapshot().sample
+        assert sample.engines_total == 33 and sample.engines_on == 0
+    finally:
+        reader.stop()
+
+
+def test_a_dropped_connection_is_still_a_lost_signal_with_missing_switch_fields():
+    reader = make_reader(lambda: FakeConn(sep_booster=True, sep_missing_fields=("Mode",), fail_after=40))
+    reader.start()
+    try:
+        assert wait_for(lambda: reader.snapshot().state is ConnState.LOST)
     finally:
         reader.stop()

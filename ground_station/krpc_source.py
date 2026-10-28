@@ -119,6 +119,15 @@ def stage_propellants(engine_propellants: list[list[str]], all_engines: list[lis
     return list(DEFAULT_PROPELLANTS)
 
 
+def _switch_field(stream) -> str | None:
+    """A field of the cluster's engine-mode switch as text, or None when this version of the mod has no such field
+    (the server then answers "Sequence contains no matching element"). Any other error, such as a dropped connection, still raises."""
+    try:
+        return str(stream())
+    except RuntimeError:
+        return None
+
+
 class _Streams:
     """Streams for one vessel. Rebuilt whenever the active vessel changes."""
 
@@ -232,12 +241,16 @@ class _Streams:
     def _sep_read(self, i: int, fuel_flow: float) -> tuple[tuple[bool, ...], float | None, float | None]:
         """A SEP cluster's lit engines, its total thrust and its full-throttle thrust (None where they cannot be known)."""
         total, mode, first_thrust, max_thrust, first_nozzles = self.sep[i]
-        total_kn = sep_cluster.parse_thrust_kn(str(total()))
+        total_text, mode_text = _switch_field(total), _switch_field(mode)  # None: this version of the part has no such field
+        total_kn = sep_cluster.parse_thrust_kn(total_text) if total_text is not None else 0.0
         first = first_thrust()
         producing = sep_cluster.is_producing(total_kn, first, fuel_flow)
-        pattern = sep_cluster.lit_for_mode(str(mode()), producing)
-        if pattern is None:
-            # An unknown mode name (a different version of the part): estimate from thrust instead.
+        pattern = sep_cluster.lit_for_mode(mode_text, producing) if mode_text is not None else None
+        if pattern is None and total_text is None and first > 0:
+            # Neither field exists: all that can be seen is the first (outer) group, and when that burns every ring inside it does too.
+            pattern = sep_cluster.lit_pattern(sep_cluster.MODE_GROUPS["Outer Twenty"])
+        elif pattern is None:
+            # An unknown or missing mode (a different version of the part): estimate from thrust instead.
             engines = sep_cluster.engines_burning(total_kn, first, first_nozzles, max_thrust(), self.throttle())
             pattern = sep_cluster.lit_pattern(sep_cluster.lit_groups(engines))
         key = self.sep_key[i]
