@@ -37,6 +37,7 @@ class Theme:
     value_embolden: float = 0.0  # the same for the speed and altitude numbers
     gauge_label_px: int = 0  # size of SPEED / KM/H style labels; 0 = same as label_px
     sub_tracking: float = 0.0  # letter spacing of the subtitle; 0 = same as label_tracking
+    value_spacing: float = 4.2  # letter spacing of the speed and altitude numbers, in pixels
 
     def tuned(self, font: str = "", accent: str = "", plate_opacity: float | None = None) -> "Theme":
         """This look with the operator's overrides: a chosen font, accent colour and plate opacity."""
@@ -73,7 +74,7 @@ STARSHIP = Theme(
     fonts=("D-DIN", "Bahnschrift", "Segoe UI", "Arial"),  # bundled D-DIN; Bahnschrift if it failed to load
     wide_fonts=("D-DIN Exp",),
     text=QColor(255, 255, 255),
-    soft=QColor(205, 212, 220),
+    soft=QColor(180, 187, 196),  # the overlay's labels and subtitle are a grey, not white
     dim=QColor(255, 255, 255, 100),
     track=QColor(255, 255, 255, 140),
     accent=QColor(255, 255, 255),
@@ -87,13 +88,14 @@ STARSHIP = Theme(
     sub_px=16,
     label_tracking=1.3,
     sub_tracking=1.0,
-    clock_embolden=0.7,
-    value_embolden=0.4,
-    digit_xscale=1.08,
+    clock_embolden=0.0,
+    value_embolden=0.0,
+    digit_xscale=1.2,
     clock_weight=QFont.Normal,
     stretch=125,
     small_stretch=108,
-    spacing=3.3,
+    spacing=1.4,
+    value_spacing=1.6,
     scrim_alpha=170,
     plate_style="slanted",
     plate_rgb=(0, 0, 0),
