@@ -56,7 +56,7 @@ Recommended: KerbalJointReinforcementContinued, FlyByWireSASMode and MechJeb2. (
 
 </details>
 
-**Stuck on "CONNECTING ... ValueError: Invalid type"?** The kRPC mod in your KSP is not version 0.6.0 (most often the newest release, 0.7.0). Install the kRPC 0.6.0 mod from the link above; the Python package is already pinned to 0.6.0 by `pip install -r requirements.txt`.
+**Status says "kRPC version mismatch" (or "ValueError: Invalid type")?** The kRPC mod in your KSP is not version 0.6.0, most often the newest release (0.7.0), which does not work with this app. Download the **older** kRPC 0.6.0 from the link above and replace the newer one; the Python package is already pinned to 0.6.0 by `pip install -r requirements.txt`.
 
 The map assumes Earth: it plots your latitude and longitude on a map of Earth, so it needs a real-scale Earth planet pack (the author uses one). On stock Kerbin, leave the map off.
 

@@ -520,3 +520,15 @@ def test_jump_to_mission_time_is_locked_by_the_broadcast_lock_and_says_so_when_t
     FakeReader.instances[0].snapshot = lambda: _flying_status(0.0)
     panel._jump_to_mission_time()
     assert "nothing to jump to" in panel.statusBar().currentMessage()
+
+
+def test_the_status_line_notes_a_kRPC_server_that_is_not_the_tested_version(panel):
+    from ground_station.krpc_source import ConnState, LiveSample, ReaderStatus
+
+    panel.session.set_source(DataSource.LIVE)
+    panel.session.connect()
+    sample = LiveSample(0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, "pre_launch", 0.0, ut=1.0)
+    FakeReader.instances[0].snapshot = lambda: ReaderStatus(ConnState.CONNECTED, sample, 0.0, None, "0.7.0")
+    assert "built for kRPC 0.6.0" in panel._connection_summary()[1]
+    FakeReader.instances[0].snapshot = lambda: ReaderStatus(ConnState.CONNECTED, sample, 0.0, None, "0.6.0")
+    assert "built for kRPC" not in panel._connection_summary()[1]

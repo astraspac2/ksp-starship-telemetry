@@ -42,7 +42,7 @@ from .branding import PANEL_TITLE
 from .clock import ClockState
 from .events import Event, event_status, format_clock_text, parse_clock, sorted_events
 from .forest_art import render_forest
-from .krpc_source import ConnState
+from .krpc_source import EXPECTED_KRPC_VERSION, ConnState
 from .mesh import ModelError, load_mesh, normalize
 from .panel_backdrops import BACKDROP_THEMES, render_backdrop
 from .mock_game import WARP_RATES
@@ -1452,6 +1452,8 @@ class ControlPanel(QMainWindow):
         if status.state is ConnState.CONNECTED:
             version = f" {status.server_version}" if status.server_version else ""
             line = f"Connected to kRPC{version} at {s.address}:{s.rpc_port}"
+            if status.server_version and status.server_version.rsplit(".", 1)[0] != EXPECTED_KRPC_VERSION.rsplit(".", 1)[0]:
+                line += f" (this app is built for kRPC {EXPECTED_KRPC_VERSION}; if something misbehaves, install the older {EXPECTED_KRPC_VERSION} mod)"
             return (AMBER, f"STALE - {line}{age}") if status.stale else (GREEN, f"{line}{age}")
         if status.state is ConnState.CONNECTING:
             return AMBER, f"CONNECTING - {status.error}" if status.error else "CONNECTING"

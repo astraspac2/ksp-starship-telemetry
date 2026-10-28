@@ -24,6 +24,8 @@ FUEL_FLOW_WINDOW = 0.5  # seconds of tank readings the fuel flow is measured ove
 FUEL_FLOW_MIN_SPAN = 0.25  # and the least span that gives a trustworthy rate
 MIN_NOZZLE_THRUST_N = 1000.0  # below this per nozzle an "engine" is a placeholder, not propulsion
 EXTRAS_SECONDS = 0.5  # maneuver nodes and the re-entry prediction are read this often; they change slowly
+EXPECTED_KRPC_VERSION = "0.6.0"  # the kRPC mod this app is built and tested with; a newer one (0.7.0) does not connect
+KRPC_DOWNLOAD_URL = "github.com/krpc/krpc/releases/tag/v0.6.0"
 REENTRY_ALTITUDE_M = 70_000.0  # where the re-entry prediction looks for the vessel coming down
 
 
@@ -320,6 +322,18 @@ class _Streams:
         )
 
 
+def connection_failure_text(address: str, port: int, exc: Exception) -> str:
+    """What the operator is told when connecting fails. The server answered but spoke a different kRPC version
+    ("Invalid type": it described a data type this client does not know), which is not a missing server."""
+    message = f"{type(exc).__name__}: {exc}"
+    if "Invalid type" in str(exc):
+        return (
+            f"kRPC version mismatch: this app needs the kRPC {EXPECTED_KRPC_VERSION} mod in KSP, not a newer one (0.7.0 does not work). "
+            f"Download the older kRPC {EXPECTED_KRPC_VERSION} from {KRPC_DOWNLOAD_URL} - {message}"
+        )
+    return f"kRPC not reachable at {address}:{port} (is the kRPC server started in KSP?) - {message}"
+
+
 class KrpcReader:
     def __init__(
         self,
@@ -399,11 +413,7 @@ class KrpcReader:
                 if had_feed:
                     self._set(ConnState.LOST, message)
                 else:
-                    self._set(
-                        ConnState.CONNECTING,
-                        f"kRPC not reachable at {self._address}:{self._rpc_port} "
-                        f"(is the kRPC server started in KSP?) - {message}",
-                    )
+                    self._set(ConnState.CONNECTING, connection_failure_text(self._address, self._rpc_port, exc))
             finally:
                 if conn is not None:
                     try:

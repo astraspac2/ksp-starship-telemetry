@@ -543,3 +543,26 @@ def test_zero_throttle_means_zero_thrust():
         assert sample.thrust_n == 0.0 and sample.throttle == 0.0
     finally:
         reader.stop()
+
+
+def test_a_kRPC_server_of_another_version_is_reported_as_a_version_mismatch_not_a_missing_server():
+    from ground_station.krpc_source import EXPECTED_KRPC_VERSION, KRPC_DOWNLOAD_URL, connection_failure_text
+
+    text = connection_failure_text("127.0.0.1", 50000, ValueError("Invalid type"))
+    assert "version mismatch" in text and EXPECTED_KRPC_VERSION in text and KRPC_DOWNLOAD_URL in text and "0.7.0" in text
+    assert "is the kRPC server started" not in text and "ValueError: Invalid type" in text  # the real error stays visible
+    other = connection_failure_text("127.0.0.1", 50000, ConnectionRefusedError("refused"))
+    assert "kRPC not reachable at 127.0.0.1:50000" in other and "version mismatch" not in other
+
+
+def test_the_reader_says_so_when_the_server_is_the_wrong_kRPC_version():
+    def refuse():
+        raise ValueError("Invalid type")
+
+    reader = make_reader(refuse)
+    reader.start()
+    try:
+        assert wait_for(lambda: "version mismatch" in (reader.snapshot().error or ""))
+        assert reader.snapshot().state is ConnState.CONNECTING
+    finally:
+        reader.stop()
