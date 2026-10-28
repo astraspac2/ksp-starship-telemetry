@@ -46,6 +46,7 @@ Needs Windows (the only system it has been run on), Python 3.11+ and KSP 1.12.x.
 | [Starship Expansion Project](https://github.com/Kari1407/Starship-Expansion-Project/releases) 3.1.0 | The Starship and Super Heavy this is made for (not for other rockets). |
 | [Starship Launch Expansion](https://forum.kerbalspaceprogram.com/index.php?/topic/203952-1122-starship-launch-expansion/) | The tower and catching arms. |
 | [Starship Pad Modernization](https://spacedock.info/mod/3924/Starship%20Pad%20Modernization) | The Pad-B/2 launch pad. Needs B9PartSwitch and ModuleManager; recommends Vessel Mover, KKStatics and Hangar Extender. |
+| [F3's GSE](https://spacedock.info/mod/4025/F3%27s%20GSE) | Ground equipment for Starship Pad B, made for the Starship Expansion Project Block 3. Needs ModuleManager, B9PartSwitch, Kerbal Konstructs, Resurfaced, Shabby and Textures Unlimited (keep it up to date); recommends TUFX and Hangar Extender. |
 
 <details>
 <summary>The Starship Expansion Project's own dependencies</summary>
