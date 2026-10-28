@@ -133,3 +133,23 @@ def test_changing_between_the_flight_bar_and_the_pad_bar_still_cuts_straight_ove
     bar.grab()
     bar.set_view_mode("pad")
     assert bar._shown is None
+
+
+def test_the_engine_dial_and_the_map_swap_faster_than_a_change_of_arrangement(qapp):
+    from ground_station.bar import MAP_FADE_SECONDS
+    from ground_station.layout import ARRANGEMENT_FADE
+
+    assert MAP_FADE_SECONDS < ARRANGEMENT_FADE
+    bar = TelemetryBar()
+    bar.set_smoothing(False)
+    bar.set_telemetry(mock_telemetry(60.0, 143.0))
+    bar.set_show_map(False)
+    bar.grab()
+    bar._changed_at -= 5.0
+    bar.grab()
+    bar.set_show_map(True)
+    bar.grab()
+    assert bar._fade_seconds == MAP_FADE_SECONDS  # the same arrangement, a different dial
+    bar.set_telemetry(mock_telemetry(140.0, 143.0))  # now the stage-sep arrangement comes in
+    bar.grab()
+    assert bar._fade_seconds == ARRANGEMENT_FADE

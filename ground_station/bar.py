@@ -18,7 +18,7 @@ from .earth_map import MapRenderer
 from .gauges import draw_attitude_dial, draw_engine_cluster, draw_map_dial, draw_value_gauge, rocket_pixels
 from .hud_window import HudWindow
 from .separation import UPPER_STAGE_ENGINES  # the ship's engines, drawn dark until it is the stage that is flying
-from .layout import BoosterMemory, Layout, fade_progress, layout_for, stage_sep_time, staged
+from .layout import ARRANGEMENT_FADE, BoosterMemory, Layout, fade_progress, layout_for, stage_sep_time, staged
 from .mesh import ModelError, builtin_rocket, load_mesh, normalize
 from .starship_model import starship_stack
 from .render3d import PROGRESS_STEPS, ModelRenderer, body_to_world
@@ -93,6 +93,7 @@ ELEMENTS = {
     Layout.FLIGHT: {ENGINE_CENTER_X: "speed", DIAL_CENTER_X: "altitude", SPEED_CENTER_X: "dial", ALTITUDE_CENTER_X: "ship_engines"},
     Layout.PAD: {PAD_ENGINE_X: "booster", PAD_THRUST_X: "thrust", PAD_THROTTLE_X: "throttle"},
 }
+MAP_FADE_SECONDS = 0.6  # the engine dial and the map swapping places; a change of arrangement takes the slower ARRANGEMENT_FADE
 FADE_OUT_SHARE = 0.4  # the first share of a change is the old element going; the rest is the new one arriving
 
 DEFAULT_MILESTONES = [Milestone("LIFTOFF", 0.0), Milestone("MAX Q", 70.0), Milestone("STAGE SEP", 143.0)]
@@ -133,6 +134,7 @@ class TelemetryBar(HudWindow):
         self._previous_arrangement: Layout | None = None
         self._shown_arrangement: Layout | None = None
         self._changed_at = 0.0
+        self._fade_seconds = ARRANGEMENT_FADE
         self.model_triangles = 0
         self._renderer: ModelRenderer
         self.set_vessel_model("")  # the built-in rocket until a model is chosen
@@ -563,7 +565,8 @@ class TelemetryBar(HudWindow):
         if kinds != self._shown:  # a new arrangement, or the map switched on or off: fade what changed
             self._previous, self._shown, self._changed_at = self._shown, kinds, now
             self._previous_arrangement, self._shown_arrangement = self._shown_arrangement, arrangement
-        progress = fade_progress(now, self._changed_at)
+            self._fade_seconds = MAP_FADE_SECONDS if self._previous_arrangement is arrangement else ARRANGEMENT_FADE
+        progress = fade_progress(now, self._changed_at, self._fade_seconds)
         base = painter.opacity()
         for x, kind in kinds.items():
             old = self._previous.get(x) if self._previous is not None and progress < 1.0 else kind
