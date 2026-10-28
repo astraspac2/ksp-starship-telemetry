@@ -17,7 +17,7 @@ python run_ground_station.py
 > **Using it in a video or live stream?** Please credit **astraspac2** and link this project if you can.<br>
 > **Found a problem?** Join the Discord <https://discord.gg/kvCDvAHWtm>, then DM Astra or mention him in the general channel.
 
-![Flight bar after stage separation](docs/flight-bar-after-separation.png)
+![Flight bar](docs/flight-bar.png)
 
 ## What it does
 
