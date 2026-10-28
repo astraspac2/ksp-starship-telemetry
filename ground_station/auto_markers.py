@@ -9,10 +9,10 @@ Two kinds:
            placed at the predicted moment, and when 70 km is really crossed on the way down it is set to that moment.
 
   landing  LANDING BURN, when the vessel coming down passes 800 m (above the ground, or above sea level if that is the chosen
-           altitude). Like re-entry it only works after the vessel has been above 70 km. From the first time the vessel is above
-           70 km the marker is placed at the predicted moment (from the orbit while it is still above the air, from how
-           fast it is sinking and slowing once it is braking in it), kept up to date as it comes down, and when 800 m
-           is really crossed it is set to that moment.
+           altitude). Like re-entry it only works after the vessel has been above 70 km. The marker
+           appears when the vessel has come down to 25 km, placed at the predicted moment (from how fast it is sinking
+           and how the air slows it, or from the orbit for the first moments), kept up to date as it comes down, and
+           when 800 m is really crossed it is set to that moment.
 
 The re-entry and landing markers are kept off the timeline until the flight clock reaches T+00:10:00 (see
 LATE_MARKER_VISIBLE_FROM), so they do not sit on the bar during the launch.
@@ -37,6 +37,7 @@ LATE_MARKER_VISIBLE_FROM = 600.0  # these two stay off the timeline until the fl
 
 LANDING_BURN_ALTITUDE_M = 800.0  # Starship lights its engines for the landing burn at about this height
 LANDING_ARM_KM = REENTRY_ALTITUDE_KM  # arms like the re-entry marker: only flights that got above 70 km
+LANDING_SHOW_KM = 25.0  # the marker only appears once the vessel is this low on the way down
 LANDING_NAME = "Landing burn"
 LANDING_MOVED_SECONDS = 0.5
 LANDING_RATE_WINDOW = 10.0  # game seconds of readings the sink rate and its slowing are measured over
@@ -378,7 +379,9 @@ class AutoMarkerTracker:
             seconds = seconds_to_reach(
                 self._sinking, LANDING_BURN_ALTITUDE_M, gravity or KERBIN_GRAVITY, scale_height or KERBIN_SCALE_HEIGHT
             )
-        in_atmosphere = altitude_km <= LANDING_ARM_KM
+        if altitude_km > LANDING_SHOW_KM:
+            return  # still too high: readings are collected, but nothing goes on the timeline yet
+        in_atmosphere = True
         if seconds is not None and (in_atmosphere or landing_ut is None or landing_ut <= ut):
             self._place_landing(self._smoothed(ut, t + seconds))  # braking in the air: its own speed says more than the orbit
         elif landing_ut is not None and landing_ut > ut:
