@@ -1,4 +1,4 @@
-"""Register the bundled D-DIN fonts (Datto, SIL OFL 1.1; licence in fonts/OFL-1.1.txt)."""
+"""Register the bundled fonts: D-DIN (Datto) and Oxanium (The Oxanium Project Authors), both SIL OFL 1.1; licences in fonts/."""
 
 from pathlib import Path
 
