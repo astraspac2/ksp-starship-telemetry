@@ -363,7 +363,7 @@ class ControlPanel(QMainWindow):
         auto_hint = QLabel(
             "Plan a maneuver node in KSP and you are asked to name it; it lands on the timeline when it will happen. "
             "RE-ENTRY appears once the vessel has been above 70 km, and is set when it "
-            "comes down through 85 km. Untick a row to hide it, Delete to remove it."
+            "comes down through 70 km. Untick a row to hide it, Delete to remove it."
         )
         auto_hint.setWordWrap(True)
         auto_hint.setStyleSheet("color: #8fa3b5;")

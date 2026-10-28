@@ -21,7 +21,7 @@ python run_ground_station.py
 
 - **Launch bar:** countdown clock, curved timeline, engine dots with a propellant ring, a 3D dial with the Starship on its booster, speed and altitude. It switches layout through stage 1, stage separation and flight, and the real separation is detected from the data.
 - **Timeline:** milestones scroll past the clock and the line bows with altitude. Add your own events and notes.
-- **Automatic markers:** plan a maneuver node in KSP and you are asked to name it; a RE-ENTRY marker appears at 85 km once the vessel has been above 70 km (suborbital flights count).
+- **Automatic markers:** plan a maneuver node in KSP and you are asked to name it; a RE-ENTRY marker appears at 70 km once the vessel has been above 70 km (suborbital flights count).
 - **Static-fire bar:** a small bar for the pad with engines, clock, thrust and throttle, in the bottom-right corner.
 - **Map:** a black-and-white Earth with your position instead of the engine dial.
 - **Honest data:** mock data is always labelled MOCK, and a lost or stale feed says so.

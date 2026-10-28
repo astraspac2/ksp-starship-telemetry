@@ -24,7 +24,7 @@ FUEL_FLOW_WINDOW = 0.5  # seconds of tank readings the fuel flow is measured ove
 FUEL_FLOW_MIN_SPAN = 0.25  # and the least span that gives a trustworthy rate
 MIN_NOZZLE_THRUST_N = 1000.0  # below this per nozzle an "engine" is a placeholder, not propulsion
 EXTRAS_SECONDS = 0.5  # maneuver nodes and the re-entry prediction are read this often; they change slowly
-REENTRY_ALTITUDE_M = 85_000.0  # where the re-entry prediction looks for the vessel coming down
+REENTRY_ALTITUDE_M = 70_000.0  # where the re-entry prediction looks for the vessel coming down
 
 
 class ConnState(Enum):
@@ -55,7 +55,7 @@ class LiveSample:
     node_uts: tuple[float, ...] = ()  # game time of each maneuver node the operator has planned
     apoapsis_km: float | None = None  # of the current orbit, above sea level
     periapsis_km: float | None = None
-    reentry_ut: float | None = None  # game time the orbit will next come down through 85 km, if it dips that low
+    reentry_ut: float | None = None  # game time the orbit will next come down through 70 km, if it dips that low
     thrust_n: float | None = None  # total thrust of the engines being flown, in newtons; None = burning but not known
     max_thrust_n: float | None = None  # what those engines would give at full throttle; None = not known
     throttle: float | None = None  # the throttle setting, 0..1
@@ -248,7 +248,7 @@ class _Streams:
         return pattern, thrust, None if each is None else each * sep_cluster.CLUSTER_ENGINES
 
     def _reentry_ut(self, ut: float) -> float | None:
-        """Game time the orbit next comes down through 85 km, or None when it never gets that low (or is already below)."""
+        """Game time the orbit next comes down through 70 km, or None when it never gets that low (or is already below)."""
         orbit = self._vessel.orbit
         radius = orbit.body.equatorial_radius + REENTRY_ALTITUDE_M
         if not (orbit.periapsis < radius < orbit.apoapsis):

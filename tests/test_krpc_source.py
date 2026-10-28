@@ -265,7 +265,7 @@ class FakeConn:
 
     @staticmethod
     def _orbit(body_frame, periapsis_altitude_km: float, apoapsis_altitude_km: float):
-        """A circular-ish orbit round a 600 km body, enough for the re-entry prediction: it crosses 85 km at UT 1500."""
+        """A circular-ish orbit round a 600 km body, enough for the re-entry prediction: it crosses 70 km at UT 1500."""
         radius = 600_000.0
         return SimpleNamespace(
             body=SimpleNamespace(reference_frame=body_frame, equatorial_radius=radius),
@@ -416,12 +416,12 @@ def test_reads_maneuver_nodes_and_the_orbit():
         sample = reader.snapshot().sample
         assert sample.node_uts == (1200.0, 1900.0)  # soonest first
         assert (sample.apoapsis_km, sample.periapsis_km) == (150.0, 110.0)
-        assert sample.reentry_ut is None  # the orbit stays above 85 km
+        assert sample.reentry_ut is None  # the orbit stays above 70 km
     finally:
         reader.stop()
 
 
-def test_predicts_when_a_dipping_orbit_comes_down_through_85_km():
+def test_predicts_when_a_dipping_orbit_comes_down_through_70_km():
     reader = make_reader(lambda: FakeConn(orbit_km=(-6000.0, 150.0)))
     reader.start()
     try:
