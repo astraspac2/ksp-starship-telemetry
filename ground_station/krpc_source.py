@@ -28,6 +28,7 @@ EXPECTED_KRPC_VERSION = "0.6.0"  # the kRPC mod this app is built and tested wit
 KRPC_DOWNLOAD_URL = "github.com/krpc/krpc/releases/tag/v0.6.0"
 REENTRY_ALTITUDE_M = 70_000.0  # where the re-entry prediction looks for the vessel coming down
 LANDING_BURN_ALTITUDE_M = 800.0  # and where the landing burn prediction does
+KERBIN_ATMOSPHERE_SCALE_HEIGHTS = 12.5  # Kerbin's 70 km of air is this many scale heights deep (5.6 km each)
 
 
 class ConnState(Enum):
@@ -60,6 +61,8 @@ class LiveSample:
     periapsis_km: float | None = None
     reentry_ut: float | None = None  # game time the orbit will next come down through 70 km, if it dips that low
     landing_ut: float | None = None  # the same for 800 m
+    gravity_ms2: float | None = None  # the world's surface gravity, for working out a landing
+    scale_height_m: float | None = None  # and roughly how fast its air thins with height
     thrust_n: float | None = None  # total thrust of the engines being flown, in newtons; None = burning but not known
     max_thrust_n: float | None = None  # what those engines would give at full throttle; None = not known
     throttle: float | None = None  # the throttle setting, 0..1
@@ -157,6 +160,7 @@ class _Streams:
         orbit = vessel.orbit
         self.apoapsis = conn.add_stream(getattr, orbit, "apoapsis_altitude")
         self.periapsis = conn.add_stream(getattr, orbit, "periapsis_altitude")
+        self.body_gravity, self.body_scale_height = self._body_constants(orbit)
         self._extras_at: float | None = None
         self._extras: tuple[tuple[float, ...], float | None, float | None] = ((), None, None)
         self.situation = conn.add_stream(getattr, vessel, "situation")
@@ -264,6 +268,22 @@ class _Streams:
         thrust = sep_cluster.cluster_thrust_n(sum(pattern), producing, first, first_nozzles, total_kn, each, self.throttle())
         return pattern, thrust, None if each is None else each * sep_cluster.CLUSTER_ENGINES
 
+    @staticmethod
+    def _body_constants(orbit) -> tuple[float | None, float | None]:
+        """The world's surface gravity and air scale height, or None for what the game does not say (or has no air)."""
+        try:
+            body = orbit.body
+            gravity = float(body.surface_gravity)
+            gravity = gravity if math.isfinite(gravity) and gravity > 0 else None
+        except Exception:
+            body, gravity = None, None
+        try:
+            depth = float(body.atmosphere_depth)
+            height = depth / KERBIN_ATMOSPHERE_SCALE_HEIGHTS if math.isfinite(depth) and depth > 0 else None
+        except Exception:
+            height = None
+        return gravity, height
+
     def _coming_down_ut(self, ut: float, altitude_m: float) -> float | None:
         """Game time the orbit next comes down through `altitude_m`, or None when it never gets that low (or is already below)."""
         orbit = self._vessel.orbit
@@ -331,6 +351,8 @@ class _Streams:
             periapsis_km=periapsis / 1000.0 if math.isfinite(periapsis) else None,
             reentry_ut=reentry_ut,
             landing_ut=landing_ut,
+            gravity_ms2=self.body_gravity,
+            scale_height_m=self.body_scale_height,
             thrust_n=thrust,
             max_thrust_n=rated if rated else None,
             throttle=self.throttle(),

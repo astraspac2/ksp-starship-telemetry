@@ -221,6 +221,8 @@ class Session:
             sample.altitude_m / 1000.0,
             sample.reentry_ut,
             sample.landing_ut,
+            sample.gravity_ms2,
+            sample.scale_height_m,
         )
         if self.auto.take_changed():
             self.sync_auto_markers()

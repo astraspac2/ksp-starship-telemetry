@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from ground_station.auto_markers import (
@@ -230,29 +232,52 @@ def test_landing_burn_is_marked_when_800_m_is_crossed_on_the_way_down():
     assert [(m.name, m.time) for m in landing_markers(markers)] == [("Landing burn", 1272.0)]
 
 
-def descent(h0, speed, slowing, until, step=0.5):
-    """Readings (seconds, kilometres) of a vessel sinking at `speed` m/s and slowing by `slowing` m/s per second."""
-    out, t = [], 0.0
-    while t <= until:
-        out.append((t, (h0 - speed * t + 0.5 * slowing * t * t) / 1000.0))
-        t += step
-    return out
+def fall(h0, speed, k, until, step=0.5, gravity=9.81, scale=5600.0):
+    """A vessel sinking from `h0` metres at `speed` m/s with drag k * density * speed^2, worked out in tiny steps.
+
+    Returns the readings (seconds, kilometres) every `step` seconds until `until`, and the second it reaches 800 m."""
+    readings, arrival = [], None
+    h, v, t, next_reading, dt = h0, speed, 0.0, 0.0, 0.005
+    while t <= until or arrival is None:
+        if t >= next_reading and t <= until:
+            readings.append((round(t, 3), h / 1000.0))
+            next_reading += step
+        h -= v * dt
+        v += (gravity - k * math.exp(-h / scale) * v * v) * dt
+        t += dt
+        if arrival is None and h <= 800.0:
+            arrival = t
+        if t > 2000.0:
+            break
+    return readings, arrival
+
 
 
 def test_landing_burn_is_placed_as_soon_as_the_vessel_is_falling_and_set_at_the_real_crossing():
     markers = []
     tracker = AutoMarkerTracker(markers)
-    sink(tracker, [(0, 100.0)] + descent(100_000.0, 500.0, 0.0, 10.0)[1:])  # 95 km, still far above 800 m
-    assert [m.time for m in landing_markers(markers)] == [1000.0 + (100_000.0 - 800.0) / 500.0]
-    sink(tracker, [(198, 1.0), (199, 0.7)])
-    assert [m.time for m in landing_markers(markers)] == [1199.0]  # the real crossing
+    readings, arrival = fall(100_000.0, 300.0, 0.0, 10.0)  # no air at all: a plain fall
+    sink(tracker, [(0, 100.0)] + readings[1:])
+    (marker,) = landing_markers(markers)
+    assert marker.time == pytest.approx(1000.0 + arrival, abs=0.5)
+    sink(tracker, [(int(arrival) + 5, 1.0), (int(arrival) + 6, 0.7)])
+    assert [m.time for m in landing_markers(markers)] == [1000.0 + int(arrival) + 6]  # the real crossing
 
 
-def test_the_prediction_allows_for_the_vessel_slowing_down():
-    path = [(t, km * 1000.0) for t, km in descent(20_000.0, 1000.0, 20.0, 6.0)]  # 800 m is 25.9 s in
-    assert seconds_to_reach(path, 800.0) == pytest.approx(25.91 - 6.0, abs=0.05)
-    steady = [(t, 20_000.0 - 1000.0 * t) for t, _ in path]
-    assert seconds_to_reach(steady, 800.0) == pytest.approx((20_000.0 - 6000.0 - 800.0) / 1000.0)
+def test_the_prediction_works_out_how_thickening_air_slows_the_vessel():
+    k = 3e-3  # slows to about 57 m/s near the ground
+    readings, arrival = fall(50_000.0, 1500.0, k, 80.0)
+    window = [(t, km * 1000.0) for t, km in readings if 60.0 <= t <= 70.0]
+    now = window[-1][0]
+    assert seconds_to_reach(window, 800.0) == pytest.approx(arrival - now, rel=0.06)
+    straight_on = (window[-1][1] - 800.0) / ((window[0][1] - window[-1][1]) / (window[-1][0] - window[0][0]))
+    assert abs(straight_on - (arrival - now)) > 2 * abs(seconds_to_reach(window, 800.0) - (arrival - now))  # better than constant speed
+
+
+def test_a_plain_fall_with_no_air_is_predicted_exactly():
+    readings, arrival = fall(30_000.0, 100.0, 0.0, 8.0)
+    window = [(t, km * 1000.0) for t, km in readings]
+    assert seconds_to_reach(window, 800.0) == pytest.approx(arrival - window[-1][0], abs=0.1)
 
 
 def test_no_prediction_without_enough_readings_or_when_not_sinking():
@@ -261,9 +286,10 @@ def test_no_prediction_without_enough_readings_or_when_not_sinking():
     assert seconds_to_reach([(0.0, 5000.0), (1.0, 5500.0), (2.0, 6000.0)], 800.0) is None
 
 
-def test_a_vessel_that_brakes_to_a_halt_above_the_target_falls_back_to_its_speed():
-    path = [(t, km * 1000.0) for t, km in descent(20_000.0, 1000.0, 100.0, 6.0)]  # would stop before 800 m
-    assert seconds_to_reach(path, 800.0) is not None
+def test_a_vessel_that_would_stop_above_the_target_does_not_give_nonsense():
+    readings, _ = fall(20_000.0, 1000.0, 5e-2, 6.0)  # braked to a near stop
+    seconds = seconds_to_reach([(t, km * 1000.0) for t, km in readings], 800.0)
+    assert seconds is None or seconds > 0
 
 
 def test_a_launch_through_800_m_is_not_a_landing_burn():
@@ -313,7 +339,7 @@ def test_the_landing_marker_round_trips_through_the_settings():
 def test_no_landing_marker_from_less_than_two_seconds_of_falling():
     markers = []
     tracker = AutoMarkerTracker(markers)
-    sink(tracker, [(0, 100.0)] + descent(100_000.0, 500.0, 0.0, 1.5)[1:])
+    sink(tracker, [(0, 100.0)] + fall(100_000.0, 300.0, 0.0, 1.5)[0][1:])
     assert landing_markers(markers) == []
 
 
@@ -344,34 +370,41 @@ def test_without_an_orbit_prediction_there_is_no_landing_marker_yet():
 def test_in_the_air_the_speed_and_braking_replace_the_orbit_prediction():
     markers = []
     tracker = AutoMarkerTracker(markers)
-    orbit_landing_tick(tracker, -30, 100.0)  # armed, well before the readings below
-    for seconds, km in descent(20_000.0, 1000.0, 20.0, 6.0):  # braking in the air: 800 m is 25.9 s in
+    orbit_landing_tick(tracker, -60, 100.0)  # armed, well before the readings below
+    readings, arrival = fall(50_000.0, 1500.0, 3e-3, 70.0)
+    for seconds, km in readings:
         orbit = 9999.0 if seconds > 2.5 else None  # once the air is measured, a far-off orbit is ignored
         tracker.update(1.0 + seconds, 1.0 + seconds, 5001.0 + seconds, (), km, None, orbit)
     (marker,) = landing_markers(markers)
-    assert marker.time == pytest.approx(1.0 + 25.91, abs=0.1)
+    assert marker.time == pytest.approx(1.0 + arrival, rel=0.05)
 
 
 def test_a_game_that_repeats_each_reading_still_gives_a_prediction():
     markers = []
     tracker = AutoMarkerTracker(markers)
     orbit_landing_tick(tracker, -30, 100.0)
-    for seconds, km in descent(20_000.0, 500.0, 0.0, 8.0, step=1.0):
+    readings, arrival = fall(30_000.0, 200.0, 0.0, 8.0, step=1.0)
+    for seconds, km in readings:
         for _ in range(4):  # the same reading arrives several times
             tracker.update(1.0 + seconds, 1.0 + seconds, 5001.0 + seconds, (), km, None)
     (marker,) = landing_markers(markers)
-    assert marker.time == pytest.approx(1.0 + (20_000.0 - 800.0) / 500.0, abs=0.1)
+    assert marker.time == pytest.approx(1.0 + arrival, abs=0.3)
 
 
 def test_one_noisy_reading_barely_moves_the_landing_marker():
     markers = []
     tracker = AutoMarkerTracker(markers)
     orbit_landing_tick(tracker, -30, 100.0)
-    path = descent(20_000.0, 500.0, 0.0, 12.0)
-    for index, (seconds, km) in enumerate(path):
+    readings, _ = fall(30_000.0, 200.0, 0.0, 12.0)
+    for index, (seconds, km) in enumerate(readings):
         km += 0.05 if index == 18 else 0.0  # one reading 50 m high
         tracker.update(1.0 + seconds, 1.0 + seconds, 5001.0 + seconds, (), km, None)
         if index == 14:
             (before,) = [m.time for m in landing_markers(markers)]
     (after,) = [m.time for m in landing_markers(markers)]
     assert after == pytest.approx(before, abs=1.0)
+
+def test_a_fall_on_a_small_world_is_predicted_with_its_gravity():
+    readings, arrival = fall(30_000.0, 100.0, 0.0, 8.0, gravity=1.63)  # a small world
+    window = [(t, km * 1000.0) for t, km in readings]
+    assert seconds_to_reach(window, 800.0, gravity=1.63) == pytest.approx(arrival - window[-1][0], abs=0.2)

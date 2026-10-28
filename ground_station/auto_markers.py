@@ -40,6 +40,11 @@ LANDING_ARM_KM = REENTRY_ALTITUDE_KM  # arms like the re-entry marker: only flig
 LANDING_NAME = "Landing burn"
 LANDING_MOVED_SECONDS = 0.5
 LANDING_RATE_WINDOW = 10.0  # game seconds of readings the sink rate and its slowing are measured over
+KERBIN_GRAVITY = 9.81  # used when the game does not say what world it is
+KERBIN_SCALE_HEIGHT = 5600.0  # metres over which the air gets e times thinner
+DRAG_MEASURABLE = 2.0  # m/s^2 of braking before the air is trusted to say how the vessel will slow
+DRAG_STEP = 0.25  # seconds per step when the descent is worked out forward
+DRAG_HORIZON = 600.0
 LANDING_SMOOTHING_SECONDS = 4.0  # the predicted moment moves toward each new prediction with this time constant
 LANDING_RATE_MIN_SPAN = 2.0
 
@@ -83,12 +88,19 @@ def auto_markers_from_dicts(rows) -> list[AutoMarker]:
     return markers
 
 
-def seconds_to_reach(samples: Sequence[tuple[float, float]], target: float) -> float | None:
+def seconds_to_reach(
+    samples: Sequence[tuple[float, float]],
+    target: float,
+    gravity: float = KERBIN_GRAVITY,
+    scale_height: float = KERBIN_SCALE_HEIGHT,
+) -> float | None:
     """How long until a falling vessel is down to `target` metres, from recent (game time, metres) readings.
 
     Fits a curve through all of the readings (so one noisy reading cannot throw it) that has both a speed and a rate of
-    slowing, so a vessel braking in the atmosphere is not predicted to arrive as if it kept its speed. With no usable
-    slowing it falls back to the plain speed. None when it is not sinking."""
+    slowing, so a vessel braking in the atmosphere is not predicted to arrive as if it kept its speed. Once the air
+    is clearly braking it, the rest of the descent is worked out forward: the drag is taken to follow
+    drag = k * (air density at that height) * speed^2, with k found from how hard it is braking now, and the air gets
+    thicker lower down. Without usable slowing it falls back to the plain speed. None when it is not sinking."""
     if len(samples) < 3:
         return None
     now = samples[-1][0]
@@ -112,6 +124,24 @@ def seconds_to_reach(samples: Sequence[tuple[float, float]], target: float) -> f
     distance = c0 - target
     if distance <= 0:
         return 0.0
+    braking = gravity + 2.0 * c2  # what the air is taking off the fall: gravity minus how fast it is really speeding up
+    if braking > DRAG_MEASURABLE:
+        arrival = _fall_through_air(c0, speed, braking, target, gravity, scale_height)
+        if arrival is not None:
+            return arrival
+    else:  # no air to speak of: a plain fall, where the speeding up is known (gravity), so only the speed is fitted
+        count, tau_sum, tau_square, height_sum, tau_height = len(samples), 0.0, 0.0, 0.0, 0.0
+        for moment_time, height in samples:
+            tau = moment_time - now
+            level = height + 0.5 * gravity * tau * tau
+            tau_sum, tau_square, height_sum, tau_height = tau_sum + tau, tau_square + tau * tau, height_sum + level, tau_height + tau * level
+        spread = count * tau_square - tau_sum * tau_sum
+        if spread > 1e-9:
+            slope = (count * tau_height - tau_sum * height_sum) / spread
+            start = (height_sum - slope * tau_sum) / count
+            if slope < 0 and start > target:
+                speed = -slope
+                return (-speed + math.sqrt(speed * speed + 2.0 * gravity * (start - target))) / gravity
     if abs(c2) > 1e-9:
         room = c1 * c1 - 4.0 * c2 * distance
         if room >= 0:
@@ -120,6 +150,24 @@ def seconds_to_reach(samples: Sequence[tuple[float, float]], target: float) -> f
             if ahead:  # it still gets there while braking
                 return min(ahead)
     return distance / speed
+
+
+def _fall_through_air(
+    height: float, speed: float, braking: float, target: float, gravity: float, scale_height: float
+) -> float | None:
+    """Seconds for a vessel at `height` sinking at `speed`, being braked by `braking` m/s^2 right now, to reach `target`."""
+    k = braking / (math.exp(-height / scale_height) * speed * speed)
+    elapsed = 0.0
+    while elapsed < DRAG_HORIZON:
+        before = height
+        height -= speed * DRAG_STEP
+        speed += (gravity - k * math.exp(-height / scale_height) * speed * speed) * DRAG_STEP
+        elapsed += DRAG_STEP
+        if height <= target:
+            return elapsed - DRAG_STEP * (target - height) / (before - height)  # inside the last step
+        if speed <= 1.0:
+            return None  # it would hover or stop above the target: the model does not describe this
+    return None
 
 
 def _solve3(matrix: list[list[float]], vector: list[float]) -> tuple[float, float, float] | None:
@@ -216,12 +264,14 @@ class AutoMarkerTracker:
         altitude_km: float | None,
         reentry_ut: float | None,
         landing_ut: float | None = None,
+        gravity: float | None = None,
+        scale_height: float | None = None,
     ) -> None:
         """Take one reading: `wall` is real time, `t` the flight clock, `ut` game time, the rest as the game reports."""
         if ut is None:
             return
         self._follow_nodes(wall, t, ut, sorted(u for u in node_uts if u > ut))
-        self._watch_landing(t, ut, altitude_km, landing_ut)  # reads the previous altitude, so it goes before the re-entry watch
+        self._watch_landing(t, ut, altitude_km, landing_ut, gravity, scale_height)  # reads the previous altitude, so it goes before the re-entry watch
         self._watch_reentry(t, ut, altitude_km, reentry_ut)
 
     def _follow_nodes(self, wall: float, t: float, ut: float, nodes: list[float]) -> None:
@@ -291,7 +341,15 @@ class AutoMarkerTracker:
             self._reentry.time = time
             self._changed = True
 
-    def _watch_landing(self, t: float, ut: float, altitude_km: float | None, landing_ut: float | None) -> None:
+    def _watch_landing(
+        self,
+        t: float,
+        ut: float,
+        altitude_km: float | None,
+        landing_ut: float | None,
+        gravity: float | None = None,
+        scale_height: float | None = None,
+    ) -> None:
         if self._landing is not None and self._landing not in self.markers:
             self._landing, self._landing_suppressed = None, True  # taken off the list by the operator
         if altitude_km is None or not math.isfinite(altitude_km):
@@ -315,7 +373,11 @@ class AutoMarkerTracker:
         while self._sinking and ut - self._sinking[0][0] > LANDING_RATE_WINDOW:
             self._sinking.popleft()
         falling = self._sinking[-1][0] - self._sinking[0][0] >= LANDING_RATE_MIN_SPAN
-        seconds = seconds_to_reach(self._sinking, LANDING_BURN_ALTITUDE_M) if falling else None
+        seconds = None
+        if falling:
+            seconds = seconds_to_reach(
+                self._sinking, LANDING_BURN_ALTITUDE_M, gravity or KERBIN_GRAVITY, scale_height or KERBIN_SCALE_HEIGHT
+            )
         in_atmosphere = altitude_km <= LANDING_ARM_KM
         if seconds is not None and (in_atmosphere or landing_ut is None or landing_ut <= ut):
             self._place_landing(self._smoothed(ut, t + seconds))  # braking in the air: its own speed says more than the orbit

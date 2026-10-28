@@ -612,3 +612,15 @@ def test_a_dropped_connection_is_still_a_lost_signal_with_missing_switch_fields(
         assert wait_for(lambda: reader.snapshot().state is ConnState.LOST)
     finally:
         reader.stop()
+
+
+def test_body_constants_come_from_the_game_and_missing_ones_are_none():
+    from types import SimpleNamespace
+
+    from ground_station.krpc_source import _Streams
+
+    kerbin = SimpleNamespace(body=SimpleNamespace(surface_gravity=9.81, atmosphere_depth=70_000.0))
+    assert _Streams._body_constants(kerbin) == (9.81, 5600.0)
+    airless = SimpleNamespace(body=SimpleNamespace(surface_gravity=1.63, atmosphere_depth=0.0))
+    assert _Streams._body_constants(airless) == (1.63, None)
+    assert _Streams._body_constants(SimpleNamespace()) == (None, None)
