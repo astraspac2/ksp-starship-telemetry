@@ -192,8 +192,6 @@ class Session:
             telemetry.t,
             sample.ut,
             sample.node_uts,
-            sample.apoapsis_km,
-            sample.periapsis_km,
             sample.altitude_m / 1000.0,
             sample.reentry_ut,
         )

@@ -12,7 +12,7 @@ from ground_station.auto_markers import (
 
 
 def node_tick(tracker, wall, t=720.0, ut=1000.0, nodes=()):
-    tracker.update(wall, t, ut, nodes, None, None, 10.0, None)
+    tracker.update(wall, t, ut, nodes, 10.0, None)
 
 
 def test_a_new_node_is_asked_about_only_once_it_has_stayed_put():
@@ -89,66 +89,106 @@ def test_a_node_in_the_past_is_ignored():
     assert tracker.pending is None
 
 
-def orbit_tick(tracker, t, ut, apo, peri, altitude, reentry_ut=None):
-    tracker.update(float(t), t, ut, (), apo, peri, altitude, reentry_ut)
+def orbit_tick(tracker, t, ut, altitude, reentry_ut=None):
+    tracker.update(float(t), t, ut, (), altitude, reentry_ut)
 
 
-def test_reentry_needs_an_orbit_above_100_km_first():
+def test_reentry_needs_the_vessel_to_have_been_above_80_km_first():
     markers = []
     tracker = AutoMarkerTracker(markers)
-    orbit_tick(tracker, 100, 1000.0, 150.0, 90.0, 120.0, reentry_ut=1300.0)  # periapsis only 90 km: not an orbit yet
-    orbit_tick(tracker, 101, 1001.0, 150.0, 90.0, 100.0)
-    orbit_tick(tracker, 102, 1002.0, 150.0, 90.0, 80.0)
+    orbit_tick(tracker, 100, 1000.0, 79.0, reentry_ut=1300.0)  # a low hop: never above 80 km
+    orbit_tick(tracker, 101, 1001.0, 78.0)
+    orbit_tick(tracker, 102, 1002.0, 70.0)
     assert markers == []
+
+
+def test_a_suborbital_flight_above_80_km_gets_a_reentry_marker():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    orbit_tick(tracker, 100, 1000.0, 60.0)
+    orbit_tick(tracker, 200, 1100.0, 120.0)  # went above 80 km, no orbit at all
+    orbit_tick(tracker, 300, 1200.0, 95.0)
+    orbit_tick(tracker, 310, 1210.0, 84.0)
+    assert [m.time for m in markers] == [310.0]
 
 
 def test_reentry_is_predicted_after_a_deorbit_burn_and_set_when_85_km_is_crossed():
     markers = []
     tracker = AutoMarkerTracker(markers)
-    orbit_tick(tracker, 5000, 8000.0, 160.0, 150.0, 155.0)  # in orbit
-    orbit_tick(tracker, 5100, 8100.0, 160.0, -30.0, 155.0, reentry_ut=8900.0)  # after the deorbit burn
+    orbit_tick(tracker, 5000, 8000.0, 155.0)  # in orbit
+    orbit_tick(tracker, 5100, 8100.0, 155.0, reentry_ut=8900.0)  # after the deorbit burn
     assert markers == [AutoMarker("Re-entry", 5900.0, REENTRY)]
-    orbit_tick(tracker, 5110, 8110.0, 160.0, -30.0, 150.0, reentry_ut=8900.0)
+    orbit_tick(tracker, 5110, 8110.0, 150.0, reentry_ut=8900.0)
     assert markers[0].time == 5900.0  # same prediction, no jitter
     for t, alt in ((5880, 90.0), (5890, 86.0), (5901, 84.0)):
-        orbit_tick(tracker, t, 8000.0 + t - 5000, 160.0, -30.0, alt)
+        orbit_tick(tracker, t, 8000.0 + t - 5000, alt)
     assert len(markers) == 1 and markers[0].time == 5901.0  # the real crossing
-    orbit_tick(tracker, 5950, 8950.0, 160.0, -30.0, 60.0)
+    orbit_tick(tracker, 5950, 8950.0, 60.0)
     assert markers[0].time == 5901.0
 
 
 def test_reentry_without_a_prediction_is_still_marked_when_85_km_is_crossed():
     markers = []
     tracker = AutoMarkerTracker(markers)
-    orbit_tick(tracker, 5000, 8000.0, 160.0, 150.0, 155.0)
-    orbit_tick(tracker, 6000, 9000.0, 160.0, -30.0, 90.0)
-    orbit_tick(tracker, 6010, 9010.0, 160.0, -30.0, 84.0)
+    orbit_tick(tracker, 5000, 8000.0, 155.0)
+    orbit_tick(tracker, 6000, 9000.0, 90.0)
+    orbit_tick(tracker, 6010, 9010.0, 84.0)
     assert [m.time for m in markers] == [6010.0]
+
+
+def test_the_marker_is_not_made_again_while_still_between_80_and_85_km():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    orbit_tick(tracker, 1, 1001.0, 120.0)
+    orbit_tick(tracker, 2, 1002.0, 90.0)
+    orbit_tick(tracker, 3, 1003.0, 84.0)
+    assert len(markers) == 1
+    markers.clear()  # the operator deletes it
+    orbit_tick(tracker, 4, 1004.0, 83.0)
+    orbit_tick(tracker, 5, 1005.0, 81.0)
+    assert markers == []
+
+
+def test_a_second_flight_gets_its_own_reentry_after_dropping_below_80_km():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    for t, alt in ((1, 120.0), (2, 90.0), (3, 84.0), (4, 60.0), (5, 100.0), (6, 90.0), (7, 84.0)):
+        orbit_tick(tracker, t, 1000.0 + t, alt)
+    assert len(markers) == 1 and markers[0].time == 7.0  # the old marker is reused and moved
+
+
+def test_a_low_hop_after_a_finished_reentry_is_not_marked():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    for t, alt in ((1, 120.0), (2, 90.0), (3, 84.0), (4, 83.0), (5, 60.0)):  # re-entry done, back low
+        orbit_tick(tracker, t, 1000.0 + t, alt)
+    orbit_tick(tracker, 6, 1006.0, 50.0, reentry_ut=1100.0)  # the next hop never gets above 80 km
+    assert [m.time for m in markers] == [3.0]  # still the first flight's crossing, not moved to the new prediction
 
 
 def test_a_deleted_reentry_marker_stays_deleted():
     markers = []
     tracker = AutoMarkerTracker(markers)
-    orbit_tick(tracker, 5000, 8000.0, 160.0, 150.0, 155.0)
-    orbit_tick(tracker, 5100, 8100.0, 160.0, -30.0, 155.0, reentry_ut=8900.0)
+    orbit_tick(tracker, 5000, 8000.0, 155.0)
+    orbit_tick(tracker, 5100, 8100.0, 155.0, reentry_ut=8900.0)
     markers.clear()
-    orbit_tick(tracker, 5101, 8101.0, 160.0, -30.0, 154.0, reentry_ut=8899.0)
+    orbit_tick(tracker, 5101, 8101.0, 154.0, reentry_ut=8899.0)
     assert markers == []
 
 
-def test_a_new_orbit_reuses_the_old_reentry_marker():
+def test_a_new_flight_reuses_the_old_reentry_marker():
     markers = [AutoMarker("Re-entry", 100.0, REENTRY)]
     tracker = AutoMarkerTracker(markers)
-    orbit_tick(tracker, 5000, 8000.0, 160.0, 150.0, 155.0)
-    orbit_tick(tracker, 5100, 8100.0, 160.0, -30.0, 155.0, reentry_ut=8900.0)
+    orbit_tick(tracker, 5000, 8000.0, 155.0)
+    orbit_tick(tracker, 5100, 8100.0, 155.0, reentry_ut=8900.0)
     assert len(markers) == 1 and markers[0].time == 5900.0
 
 
-def test_a_hyperbolic_or_missing_orbit_does_nothing():
+def test_a_missing_or_unknown_altitude_does_nothing():
     markers = []
     tracker = AutoMarkerTracker(markers)
-    orbit_tick(tracker, 1, 1001.0, float("nan"), float("nan"), 200.0)
-    orbit_tick(tracker, 2, 1002.0, None, None, 90.0)
+    orbit_tick(tracker, 1, 1001.0, float("nan"))
+    orbit_tick(tracker, 2, 1002.0, None, reentry_ut=1100.0)
     assert markers == []
 
 

@@ -362,7 +362,7 @@ class ControlPanel(QMainWindow):
         auto_inner.addLayout(auto_buttons)
         auto_hint = QLabel(
             "Plan a maneuver node in KSP and you are asked to name it; it lands on the timeline when it will happen. "
-            "RE-ENTRY appears after an orbit with apoapsis and periapsis above 100 km, and is set when the vessel "
+            "RE-ENTRY appears once the vessel has been above 80 km, and is set when it "
             "comes down through 85 km. Untick a row to hide it, Delete to remove it."
         )
         auto_hint.setWordWrap(True)
