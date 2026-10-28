@@ -93,20 +93,28 @@ def orbit_tick(tracker, t, ut, altitude, reentry_ut=None):
     tracker.update(float(t), t, ut, (), altitude, reentry_ut)
 
 
-def test_reentry_needs_the_vessel_to_have_been_above_80_km_first():
+def test_reentry_needs_the_vessel_to_have_been_above_70_km_first():
     markers = []
     tracker = AutoMarkerTracker(markers)
-    orbit_tick(tracker, 100, 1000.0, 79.0, reentry_ut=1300.0)  # a low hop: never above 80 km
-    orbit_tick(tracker, 101, 1001.0, 78.0)
-    orbit_tick(tracker, 102, 1002.0, 70.0)
+    orbit_tick(tracker, 100, 1000.0, 69.0, reentry_ut=1300.0)  # a low hop: never above 70 km
+    orbit_tick(tracker, 101, 1001.0, 68.0)
+    orbit_tick(tracker, 102, 1002.0, 60.0)
     assert markers == []
 
 
-def test_a_suborbital_flight_above_80_km_gets_a_reentry_marker():
+def test_the_threshold_is_70_km():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    orbit_tick(tracker, 1, 1001.0, 71.0)
+    orbit_tick(tracker, 2, 1002.0, 71.0, reentry_ut=1100.0)
+    assert len(markers) == 1
+
+
+def test_a_suborbital_flight_above_70_km_gets_a_reentry_marker():
     markers = []
     tracker = AutoMarkerTracker(markers)
     orbit_tick(tracker, 100, 1000.0, 60.0)
-    orbit_tick(tracker, 200, 1100.0, 120.0)  # went above 80 km, no orbit at all
+    orbit_tick(tracker, 200, 1100.0, 120.0)  # went above 70 km, no orbit at all
     orbit_tick(tracker, 300, 1200.0, 95.0)
     orbit_tick(tracker, 310, 1210.0, 84.0)
     assert [m.time for m in markers] == [310.0]
@@ -136,7 +144,7 @@ def test_reentry_without_a_prediction_is_still_marked_when_85_km_is_crossed():
     assert [m.time for m in markers] == [6010.0]
 
 
-def test_the_marker_is_not_made_again_while_still_between_80_and_85_km():
+def test_the_marker_is_not_made_again_while_still_between_70_and_85_km():
     markers = []
     tracker = AutoMarkerTracker(markers)
     orbit_tick(tracker, 1, 1001.0, 120.0)
@@ -145,11 +153,11 @@ def test_the_marker_is_not_made_again_while_still_between_80_and_85_km():
     assert len(markers) == 1
     markers.clear()  # the operator deletes it
     orbit_tick(tracker, 4, 1004.0, 83.0)
-    orbit_tick(tracker, 5, 1005.0, 81.0)
+    orbit_tick(tracker, 5, 1005.0, 72.0)
     assert markers == []
 
 
-def test_a_second_flight_gets_its_own_reentry_after_dropping_below_80_km():
+def test_a_second_flight_gets_its_own_reentry_after_dropping_below_70_km():
     markers = []
     tracker = AutoMarkerTracker(markers)
     for t, alt in ((1, 120.0), (2, 90.0), (3, 84.0), (4, 60.0), (5, 100.0), (6, 90.0), (7, 84.0)):
@@ -162,7 +170,7 @@ def test_a_low_hop_after_a_finished_reentry_is_not_marked():
     tracker = AutoMarkerTracker(markers)
     for t, alt in ((1, 120.0), (2, 90.0), (3, 84.0), (4, 83.0), (5, 60.0)):  # re-entry done, back low
         orbit_tick(tracker, t, 1000.0 + t, alt)
-    orbit_tick(tracker, 6, 1006.0, 50.0, reentry_ut=1100.0)  # the next hop never gets above 80 km
+    orbit_tick(tracker, 6, 1006.0, 50.0, reentry_ut=1100.0)  # the next hop never gets above 70 km
     assert [m.time for m in markers] == [3.0]  # still the first flight's crossing, not moved to the new prediction
 
 
