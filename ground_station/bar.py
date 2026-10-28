@@ -168,8 +168,10 @@ class TelemetryBar(HudWindow):
 
     def set_view_mode(self, mode: str) -> None:
         """"pad" for the small pad / static-fire bar (engines, clock, thrust and throttle), else the full flight bar."""
-        self._pad = mode == "pad"
-        self._shown = None  # the new bar is simply there, with no fade from the old one
+        pad = mode == "pad"
+        if pad != self._pad:
+            self._shown = None  # a different bar is simply there, with no fade from the old one
+        self._pad = pad  # the same mode again (every change in the panel says it) must not cancel a fade that is under way
         self._apply_size()
         self.update()
 

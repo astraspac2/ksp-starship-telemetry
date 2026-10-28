@@ -109,3 +109,27 @@ def test_the_3d_dial_turns_smoothly_rather_than_in_steps(qapp):
     bar._attitude_time -= 5.0  # a long pause: the dial starts again from the real attitude
     bar._rocket_image(turned)
     assert np.allclose(bar._attitude, target)
+
+
+def test_switching_the_map_on_fades_even_when_the_panel_sets_the_view_mode_again(qapp):
+    """Every change in the panel re-applies all the display settings, including the unchanged view mode; that must not cut the fade."""
+    bar = TelemetryBar()
+    bar.set_smoothing(False)
+    bar.set_telemetry(mock_telemetry(60.0, 143.0))
+    before = bar.grab().toImage()
+    bar.set_show_map(True)
+    bar.set_view_mode("flight")  # what apply_display does after the checkbox is ticked
+    bar.grab()  # the change is seen: the old dial starts to go
+    bar._changed_at -= 0.3  # a moment into the fade
+    middle = bar.grab().toImage()
+    bar._changed_at -= 5.0
+    after = bar.grab().toImage()
+    assert middle != before and middle != after  # a frame between the two dials exists
+
+
+def test_changing_between_the_flight_bar_and_the_pad_bar_still_cuts_straight_over(qapp):
+    bar = TelemetryBar()
+    bar.set_telemetry(mock_telemetry(60.0, 143.0))
+    bar.grab()
+    bar.set_view_mode("pad")
+    assert bar._shown is None
