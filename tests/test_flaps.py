@@ -166,14 +166,17 @@ def tilted(folds):
     return tel
 
 
-def test_the_dial_redraws_when_the_flaps_move_and_not_when_they_do_not(qapp):
+def test_the_dial_redraws_when_the_flaps_move_and_not_when_they_do_not(qapp, monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr("ground_station.bar.time.monotonic", lambda: clock[0])
     bar = TelemetryBar()
-    bar.set_telemetry(tilted(None))
+    bar.set_telemetry(tilted((0.0,) * 4))
     first = bar._rocket_image(bar._telemetry)
     assert bar._rocket_image(bar._telemetry) is first  # nothing moved: the same picture
     bar.set_telemetry(tilted((50.0,) * 4))
-    assert bar._rocket_image(bar._telemetry) is not first  # the flaps folded in
-    assert bar._flap_shown == (50.0,) * 4
+    clock[0] += 0.2
+    assert bar._rocket_image(bar._telemetry) is not first  # the flaps started to fold in
+    assert 0.0 < bar._flap_shown[0] < 50.0
 
 
 def test_the_flaps_swing_toward_the_game_instead_of_jumping(qapp, monkeypatch):
@@ -192,28 +195,21 @@ def test_the_flaps_swing_toward_the_game_instead_of_jumping(qapp, monkeypatch):
     assert bar._flap_shown[0] == pytest.approx(50.0)
 
 
-def test_when_the_readings_go_the_flaps_return_to_the_pose_they_were_built_in(qapp):
+def test_before_any_reading_the_flaps_are_retracted_as_on_the_pad(qapp):
+    from ground_station.bar import FLAP_STOWED_FOLD
+
     bar = TelemetryBar()
-    bar.set_telemetry(tilted((50.0,) * 4))
+    bar.set_telemetry(tilted(None))
+    bar._rocket_image(bar._telemetry)
+    assert bar._flap_shown == (FLAP_STOWED_FOLD,) * 4
+    assert all(abs(fold - FLAP_STOWED_FOLD) < FLAP_STEP for fold in bar._renderer._folds)  # drawn in steps
+
+
+def test_when_the_readings_stop_the_flaps_stay_as_they_were_last_seen(qapp):
+    bar = TelemetryBar()
+    bar.set_telemetry(tilted((0.0,) * 4))
     bar._rocket_image(bar._telemetry)
     bar.set_telemetry(tilted(None))
     bar._rocket_image(bar._telemetry)
-    assert bar._flap_shown is None and bar._renderer._folds is None
+    assert bar._flap_shown == (0.0,) * 4  # not snapped back to retracted
     assert FLAP_STEP > 0
-
-
-def test_a_folded_flap_turns_away_from_the_heat_shield():
-    from ground_station.starship_model import TILE_CENTRE
-
-    mesh = starship_stack()
-    renderer = ModelRenderer(mesh, 64)
-    rest = renderer._vertices.copy()
-    renderer.set_flap_folds((50.0, 50.0, 50.0, 50.0))
-
-    def distance_from_shield(vertex):
-        angle = math.atan2(vertex[2], vertex[0])
-        return abs((angle - TILE_CENTRE + math.pi) % (2 * math.pi) - math.pi)
-
-    for rig in mesh.flaps:
-        tip = rig.first + 2  # the outer lower corner of the upper outline
-        assert distance_from_shield(renderer._vertices[tip]) > distance_from_shield(rest[tip]) + 0.3

@@ -83,6 +83,7 @@ ATTITUDE_SNAP_COSINE = 0.34  # a turn of more than about 70 degrees (a new vesse
 ATTITUDE_RESET_SECONDS = 0.5  # after a pause this long (the dial was hidden) it starts again from the real attitude
 ATTITUDE_REDRAW_DELTA = 0.0015  # about a tenth of a degree
 FLAP_SPEED = 45.0  # degrees a second the dial's flaps swing at, toward what the game reports
+FLAP_STOWED_FOLD = 50.0  # how far in the flaps are drawn before the game has said anything: retracted, as the ship is at launch
 FLAP_STEP = 3.0  # the flaps are redrawn in steps of this many degrees (each new picture of the model costs a few tens of milliseconds)
 DOT_FADE_SECONDS = 0.12  # an engine dot closes about two thirds of the way to lit or dim in this long
 NO_DATA_TEXT = "NO DATA"  # what the booster's gauges say once it cannot be read
@@ -284,17 +285,19 @@ class TelemetryBar(HudWindow):
     def _swing_flaps(self, target: tuple[float, ...] | None, now: float) -> bool:
         """Move the model's flaps toward the folds the game reports (at most FLAP_SPEED degrees a second, so they swing instead of
         jumping), in steps of FLAP_STEP degrees so a new picture is only drawn when it shows. Returns whether the picture must be redrawn.
-        Without readings the flaps go back to the pose the model was built in."""
+        Before the first reading they are drawn retracted, as on the pad; if the readings stop they stay as they were."""
         elapsed = min(max(now - self._flap_time, 0.0), 0.25)
         self._flap_time = now
         if target is None or len(target) != 4:
-            self._flap_shown = None
+            if self._flap_shown is None:
+                self._flap_shown = (FLAP_STOWED_FOLD,) * 4  # nothing read yet: the ship is on the pad with its flaps retracted
+            # readings that stop leave the flaps as they were last seen
         elif self._flap_shown is None:
             self._flap_shown = tuple(target)
         else:
             reach = FLAP_SPEED * elapsed
             self._flap_shown = tuple(shown + max(-reach, min(reach, goal - shown)) for shown, goal in zip(self._flap_shown, target))
-        steps = None if self._flap_shown is None else tuple(round(value / FLAP_STEP) * FLAP_STEP for value in self._flap_shown)
+        steps = tuple(round(value / FLAP_STEP) * FLAP_STEP for value in self._flap_shown)
         return self._renderer.set_flap_folds(steps)
 
     def _rocket_image(self, tel: Telemetry):
