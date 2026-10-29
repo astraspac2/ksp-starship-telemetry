@@ -2,7 +2,7 @@
 
 Measured from pictures of the user's KSP vessel (ship and booster alone, and the full stack):
 
-  ship     about 44 % of the stack. Long ogive nose (a quarter of the ship), a heat shield of staggered black tiles covering
+  ship     about 40 % of the stack. Long ogive nose (a quarter of the ship), a heat shield of staggered black tiles covering
            one half of the circumference (the other half polished stainless), two swept forward flaps just below the nose and
            two large aft flaps near the bottom.
   booster  a slotted hot-stage ring on top, three lattice grid fins (the steel side has none) just under it, a dark weld belt
@@ -21,9 +21,9 @@ import numpy as np
 
 from .mesh import Mesh
 
-SHIP_LENGTH = 0.44
+SHIP_LENGTH = 0.40  # a little over a third of the stack, so the booster is the longer of the two
 SPLIT_Y = 0.5 - SHIP_LENGTH  # where the ship's bottom meets the booster, in model height
-BODY_RADIUS = 0.037  # the ship is 6 diameters long, as measured on the picture of it
+BODY_RADIUS = 0.034  # the ship is about 5.9 diameters long, as measured on the picture of it
 DIAMETER = 2 * BODY_RADIUS
 NOSE_SHARE = 0.175  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
 NOSE_BLACK_SHARE = 0.85  # of the nose is black tile all the way round, even on the steel side
@@ -32,7 +32,7 @@ SKIRT_TOP = -0.47  # the engine skirt runs from here down to the bells at -0.5
 SEGMENTS = 28  # round the axis: enough that the silhouette is smooth at the dial's size
 
 # Colours follow the SpaceX overlay's dial icon: a bright white booster under a dark ship.
-STEEL = np.array([0.95, 0.96, 0.98])  # the booster: polished stainless
+STEEL = np.array([0.66, 0.68, 0.72])  # the booster: the same greyish stainless as the ship
 SHIP_STEEL = np.array([0.66, 0.68, 0.72])  # the ship's stainless half
 TILE = np.array([0.17, 0.18, 0.21])  # the ship's heat shield: black in the game, dark enough to read as black but not lost on the dial's dark disc
 BELT = np.array([0.62, 0.64, 0.68])  # the booster's weld belt
@@ -74,7 +74,7 @@ LOGO = np.array([0.08, 0.08, 0.10])  # the black X between the hatches
 HATCH_SIZE = (0.0120, 0.0085)  # round the ship, along it
 LOGO_HEIGHT = 0.0125
 BOOSTER_BELT = (0.345, 0.375)  # as fractions of the booster's length from its top
-BELL_RADIUS = 0.0036  # one engine bell on the booster's bottom
+BELL_RADIUS = 0.0033  # one engine bell on the booster's bottom
 
 
 def _nose_radius(s: float) -> float:
@@ -326,7 +326,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
             return ENGINES, 0.2
         if belt[0] <= middle <= belt[1]:
             return BELT, GLOSS_BOOSTER
-        return STEEL * (0.985 if band % 2 else 1.015) * (0.985 if k % 6 == 0 else 1.0), GLOSS_BOOSTER
+        return STEEL * (1.0 + 0.03 * (((k // 3 + band) % 2) - 0.5)) * (0.985 if k % 7 == 0 else 1.0), GLOSS_STEEL  # the ship's panel pattern
 
     first = tube(booster_rings, booster_colour)
     for ux, uy in _engine_layout():  # the 33 bells, a dark hexagon each, on the skirt's flat bottom
