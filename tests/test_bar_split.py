@@ -140,3 +140,59 @@ def test_a_booster_that_cannot_be_read_says_no_data_in_both_gauges(qapp):
     image = nothing.grab().toImage()
     inside = sum(image.pixelColor(int(ENGINE_CENTER_X) + dx, int(GAUGE_Y)).red() for dx in range(-int(GAUGE_RADIUS * 0.7), int(GAUGE_RADIUS * 0.7)))
     assert inside > 0
+
+
+def at_progress(seconds_in):
+    """The bar part way through the change from the stage-sep layout to the split one: `seconds_in` after it began."""
+    import time
+
+    base = dataclasses.replace(mock_telemetry(150.0, 143.0), separated_at=143.0, heading_deg=90.0, pitch_deg=80.0, roll_deg=0.0)
+    bar = TelemetryBar()
+    bar.set_telemetry(base)
+    bar.grab()
+    bar._changed_at -= 10.0
+    bar.set_telemetry(dataclasses.replace(base, t=300.0, booster_live=True, booster_speed_kmh=1792.0, booster_altitude_km=88.7))
+    bar.grab()  # notices the change and starts its clock
+    bar._changed_at = time.monotonic() - seconds_in
+    return bar
+
+
+def region_ink(bar, x0, x1, y0, y1):
+    image = bar.grab().toImage()
+    return sum(
+        image.pixelColor(x, y).red() + image.pixelColor(x, y).green() + image.pixelColor(x, y).blue()
+        for y in range(int(y0), int(y1))
+        for x in range(int(x0), int(x1))
+    )
+
+
+def test_a_leaving_engine_cluster_loses_its_dots_before_its_ring(qapp):
+    from ground_station.bar import GAUGE_RADIUS
+
+    r = GAUGE_RADIUS
+    inside = (ENGINE_CENTER_X - r * 0.6, ENGINE_CENTER_X + r * 0.6, GAUGE_Y - r * 0.6, GAUGE_Y + r * 0.6)  # the dots
+    top_ring = (ENGINE_CENTER_X - 10, ENGINE_CENTER_X + 10, GAUGE_Y - r - 4, GAUGE_Y - r + 4)  # the top of the ring
+    start, middle = at_progress(0.0), at_progress(0.28)  # a little over half way through the leaving
+    assert region_ink(middle, *inside) < region_ink(start, *inside) * 0.25  # the dots are nearly gone
+    assert region_ink(middle, *top_ring) > region_ink(start, *top_ring) * 0.5  # while the ring is still there
+
+
+def test_an_arriving_gauge_shows_its_label_before_its_number(qapp):
+    from ground_station.bar import GAUGE_RADIUS
+
+    r = GAUGE_RADIUS
+    label = (ENGINE_CENTER_X - 40, ENGINE_CENTER_X + 40, GAUGE_Y - r * 0.575 - 2, GAUGE_Y - r * 0.575 + 16)  # SPEED
+    number = (ENGINE_CENTER_X - 55, ENGINE_CENTER_X + 55, GAUGE_Y - 22, GAUGE_Y + 22)
+    early, done = at_progress(0.75), at_progress(1.5)  # the arrival starts at 0.56 s
+    assert region_ink(early, *label) > 0.3 * region_ink(done, *label)  # the label is already coming in
+    assert region_ink(early, *number) < 0.3 * region_ink(done, *number)  # the number is not yet
+
+
+def test_the_3d_dial_shrinks_away(qapp):
+    from ground_station.bar import DIAL_RADIUS
+
+    whole = (DIAL_CENTER_X - DIAL_RADIUS, DIAL_CENTER_X + DIAL_RADIUS, GAUGE_Y - DIAL_RADIUS, GAUGE_Y + DIAL_RADIUS)
+    edge = (DIAL_CENTER_X + DIAL_RADIUS * 0.75, DIAL_CENTER_X + DIAL_RADIUS + 2, GAUGE_Y - 8, GAUGE_Y + 8)  # near its right rim
+    start, middle = at_progress(0.0), at_progress(0.28)
+    assert region_ink(middle, *edge) < region_ink(start, *edge) * 0.7  # the rim has pulled in
+    assert region_ink(middle, *whole) < region_ink(start, *whole)

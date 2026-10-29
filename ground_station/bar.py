@@ -101,6 +101,19 @@ MAP_FADE_SECONDS = 0.6  # the engine dial and the map swapping places; a change 
 RING_EARLY_SECONDS = 0.16  # the fuel ring starts to fill this long before its engine dots are fully there (0.2 s after they start, for the map swap)
 RING_FILL_SECONDS = 0.4  # and takes this long to fill
 FADE_OUT_SHARE = 0.4  # the first share of a change is the old element going; the rest is the new one arriving
+# These elements come and go in parts, one after another, as on the overlay: an engine cluster loses its dots and then its ring,
+# the 3D dial shrinks away, and a gauge shows its label first, then sweeps its ring round, then its number. The rest simply fade.
+STAGED_ELEMENTS = {"booster", "ship_engines", "dial", "speed", "altitude", "booster_speed", "booster_altitude"}
+DIAL_SMALLEST = 0.6  # how small the 3D dial gets as it leaves, and how small it starts as it arrives
+
+
+def _ramp(value: float, start: float, end: float) -> float:
+    return min(max((value - start) / (end - start), 0.0), 1.0)
+
+
+def _ease(value: float) -> float:
+    value = min(max(value, 0.0), 1.0)
+    return value * value * (3.0 - 2.0 * value)
 
 DEFAULT_MILESTONES = [Milestone("LIFTOFF", 0.0), Milestone("MAX Q", 70.0), Milestone("STAGE SEP", 143.0)]
 
@@ -592,11 +605,12 @@ class TelemetryBar(HudWindow):
             if old == kind:
                 self._draw_element(painter, tel, kind, x, arrangement, upper_live, booster, 1.0, ring_fill if x in self._arrived else 1.0)
             elif progress < FADE_OUT_SHARE:
-                painter.setOpacity(base * (1.0 - progress / FADE_OUT_SHARE))
-                self._draw_element(painter, tel, old, x, self._previous_arrangement or arrangement, upper_live, booster, 1.0)
+                leaving = progress / FADE_OUT_SHARE
+                painter.setOpacity(base if old in STAGED_ELEMENTS else base * (1.0 - leaving))
+                self._draw_element(painter, tel, old, x, self._previous_arrangement or arrangement, upper_live, booster, 1.0, 1.0, leaving)
             else:
                 arriving = (progress - FADE_OUT_SHARE) / (1.0 - FADE_OUT_SHARE)
-                painter.setOpacity(base * arriving)
+                painter.setOpacity(base if kind in STAGED_ELEMENTS and kind not in ("booster", "ship_engines") else base * arriving)
                 self._draw_element(painter, tel, kind, x, arrangement, upper_live, booster, arriving, ring_fill)
             painter.setOpacity(base)
         self._draw_side_labels(painter, arrangement, progress, base)
@@ -668,9 +682,19 @@ class TelemetryBar(HudWindow):
         booster: tuple | None,
         grow: float,
         ring: float = 1.0,
+        leaving: float = 0.0,
     ) -> None:
-        """One dial at one position. `grow` (0..1) is how far an engine cluster has drawn itself in."""
+        """One dial at one position. `grow` (0..1) is how far it has arrived and `leaving` (0..1) how far it has gone:
+        an engine cluster draws itself in, a gauge shows its label, sweeps its ring and then shows its number."""
         theme = self._theme
+        dots_alpha, ring_alpha = 1.0 - _ramp(leaving, 0.0, 0.55), 1.0 - _ramp(leaving, 0.3, 1.0)
+        arriving = grow < 1.0 and leaving == 0.0
+        gauge = {  # the parts of a gauge, each with its own alpha, and how far its ring has swept
+            "label_alpha": _ramp(grow, 0.0, 0.35) if arriving else 1.0 - _ramp(leaving, 0.5, 1.0),
+            "ring_alpha": _ramp(grow, 0.1, 0.45) if arriving else 1.0 - _ramp(leaving, 0.25, 0.9),
+            "value_alpha": _ramp(grow, 0.3, 0.8) if arriving else 1.0 - _ramp(leaving, 0.0, 0.5),
+            "reveal": _ease(_ramp(grow, 0.1, 0.8)) if arriving else 1.0,
+        }
         centre = QPointF(x, GAUGE_Y)
         r = GAUGE_RADIUS
         no_data = "—"
@@ -681,15 +705,22 @@ class TelemetryBar(HudWindow):
                 fuel, on, total, lit = booster or (0.0, 0, BOOSTER_ENGINES, (False,) * BOOSTER_ENGINES)
             else:
                 fuel, on, total, lit = tel.fuel_fraction or 0.0, tel.engines_on, tel.engines_total, tel.engine_lit
-            draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit), ring)
+            draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit), ring, dots_alpha, ring_alpha)
         elif kind == "ship_engines":
             if upper_live or arrangement is Layout.FLIGHT:
                 fuel, on, total, lit = tel.fuel_fraction or 0.0, tel.engines_on, tel.engines_total, tel.engine_lit
             else:  # the ship's own readings are not available until it is the vessel being flown
                 fuel, on, total, lit = 0.0, 0, UPPER_STAGE_ENGINES, (False,) * UPPER_STAGE_ENGINES
-            draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit), ring)
+            draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit), ring, dots_alpha, ring_alpha)
         elif kind == "dial":
+            shrink = _ease(leaving) if leaving > 0.0 else 1.0 - _ease(grow)  # it shrinks away, and arrives growing from small
+            painter.save()
+            painter.translate(centre)
+            painter.scale(1.0 - (1.0 - DIAL_SMALLEST) * shrink, 1.0 - (1.0 - DIAL_SMALLEST) * shrink)
+            painter.translate(-centre)
+            painter.setOpacity(painter.opacity() * (1.0 - shrink))
             draw_attitude_dial(painter, centre, DIAL_RADIUS, tel.pitch_deg, theme, self._rocket_image(tel))
+            painter.restore()
         elif kind in ("speed", "booster_speed"):
             speed = tel.booster_speed_kmh if kind == "booster_speed" else tel.speed_kmh
             text, label = ("", format_speed(0.0, self._speed_unit)[1]) if speed is None else format_speed(speed, self._speed_unit)
@@ -697,7 +728,7 @@ class TelemetryBar(HudWindow):
             draw_value_gauge(
                 painter, centre, r, 0.0 if speed is None else speed / SPEED_FULL_SCALE_KMH, "SPEED",
                 NO_DATA_TEXT if lost else no_data if speed is None else text, "" if lost else label, theme,
-                arrangement is Layout.FLIGHT, NO_DATA_SCALE if lost else 1.0,
+                arrangement is Layout.FLIGHT, NO_DATA_SCALE if lost else 1.0, **gauge,
             )
         elif kind in ("altitude", "booster_altitude"):
             altitude = tel.booster_altitude_km if kind == "booster_altitude" else tel.altitude_km
@@ -716,6 +747,7 @@ class TelemetryBar(HudWindow):
                 theme,
                 arrangement is Layout.FLIGHT,
                 NO_DATA_SCALE if lost else 1.0,
+                **gauge,
             )
         elif kind == "thrust":
             thrust, full = tel.thrust_n, tel.max_thrust_n
