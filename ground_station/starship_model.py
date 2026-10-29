@@ -79,7 +79,7 @@ BELL_RADIUS = 0.0033  # one engine bell on the booster's bottom
 
 
 COLLAR_HEIGHT = 0.011  # the dark band where the nose's black cap ends, a little wider than the barrel
-COLLAR_BULGE = 1.045
+COLLAR_BULGE = 1.0  # no bump: the nose keeps its exact outline, the band is only darker
 DOME_SHARE = 1.0  # of the nose's length: the rounded dome reaches full width this far down, the rest is black barrel
 
 
