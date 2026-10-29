@@ -28,6 +28,8 @@ DIAMETER = 2 * BODY_RADIUS
 NOSE_SHARE = 0.27  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
 NOSE_BLACK_SHARE = 0.54  # the black cap is this share of the nose tall: about a body width down from the tip, as in the picture  # of the nose is black tile all the way round, even on the steel side
 HOT_STAGE_HEIGHT = 0.022
+TRUSS_BAND = 0.004  # the broad ring on top of the truss
+BELL_DROP = 0.022  # how far the engine bells hang below the skirt
 SKIRT_TOP = -0.47  # the engine skirt runs from here down to the bells at -0.5
 SEGMENTS = 24  # round the axis: enough that the silhouette is smooth at the dial's size
 
@@ -41,7 +43,7 @@ RING_DARK = np.array([0.34, 0.35, 0.39])
 ENGINES = np.array([0.20, 0.20, 0.23])
 BELL = np.array([0.09, 0.09, 0.11])  # the inside of an engine bell, seen from below
 FIN = np.array([0.72, 0.73, 0.77])
-FIN_HOLE = np.array([0.30, 0.31, 0.36])  # the gaps in a grid fin's lattice
+FIN_HOLE = np.array([0.12, 0.13, 0.16])  # the gaps in a grid fin's lattice
 FLAP_STEEL = np.array([0.74, 0.76, 0.80])  # the face of a flap on the steel side of the ship: bare steel panels
 FLAP = np.array([0.18, 0.19, 0.22])  # the flaps are covered by the heat shield too: black tile like the shield side
 
@@ -75,7 +77,11 @@ LOGO = np.array([0.08, 0.08, 0.10])  # the black X between the hatches
 HATCH_SIZE = (0.0120, 0.0085)  # round the ship, along it
 LOGO_HEIGHT = 0.0125
 BOOSTER_BELT = (0.345, 0.375)  # as fractions of the booster's length from its top
-BELL_RADIUS = 0.0033  # one engine bell on the booster's bottom
+BELL_RADIUS = 0.0033
+FIN_OUT, FIN_HALF, FIN_THICKNESS, FIN_WINDOWS = 0.55, 0.32, 0.016, 3  # a grid fin: how far out (in diameters), half width, thickness and windows each way
+BOOSTER_BELT = (0.365, 0.395)  # as fractions of the booster's length from its top
+TRUSS_STRUTS = 24
+CHINE_ANGLE, CHINE_HALF, CHINE_HEIGHT = np.radians(31), np.radians(8), 0.40  # the raised strips either side of the raceway, low on the booster  # one engine bell on the booster's bottom
 
 
 COLLAR_HEIGHT = 0.011  # the dark band where the nose's black cap ends, a little wider than the barrel
@@ -218,23 +224,32 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         slab(rows, FLAP, GLOSS_FLAP, FLAP_STEEL if steel_up else FLAP, FLAP if steel_up else FLAP_STEEL)
 
     def grid_fin(angle: float, height: float) -> None:
-        """A grid fin: a flat lattice sticking out sideways from the booster, bars with dark gaps between them."""
+        """A grid fin: a thick octagonal block sticking out sideways from the booster, with a lattice of open windows in its faces."""
         direction = np.array([np.cos(angle), np.sin(angle)])
         sideways = np.array([-direction[1], direction[0]])
-        inner, outer = BODY_RADIUS * 0.9, BODY_RADIUS + 0.30 * DIAMETER
-        half_width, thickness = 0.19 * DIAMETER, 0.008
-        along_cells, across_cells = 5, 5
+        inner, outer = BODY_RADIUS * 0.9, BODY_RADIUS + FIN_OUT * DIAMETER
+        half, thickness, cut = FIN_HALF * DIAMETER, FIN_THICKNESS, 0.09 * DIAMETER
+
         def at(along: float, across: float, level: float) -> tuple[float, float, float]:
             x, z = direction * along + sideways * across
             return (float(x), level, float(z))
 
-        for i in range(along_cells):
-            for j in range(across_cells):
-                lo, hi = inner + (outer - inner) * i / along_cells, inner + (outer - inner) * (i + 1) / along_cells
-                left, right = -half_width + 2 * half_width * j / across_cells, -half_width + 2 * half_width * (j + 1) / across_cells
-                hole = i % 2 == 1 and j % 2 == 1  # a frame all round and bars between four open windows: a lattice
-                for level in (height + thickness / 2, height - thickness / 2):
-                    flat([at(lo, left, level), at(hi, left, level), at(hi, right, level), at(lo, right, level)], FIN_HOLE if hole else FIN, 0.2)
+        footprint = [(inner, -half), (inner, half), (outer - cut, half), (outer, half - cut), (outer, -(half - cut)), (outer - cut, -half)]
+        top, bottom = height + thickness / 2, height - thickness / 2
+        flat([at(a_, c_, top) for a_, c_ in footprint], FIN, 0.3)
+        flat([at(a_, c_, bottom) for a_, c_ in footprint], FIN, 0.3)
+        for k in range(len(footprint)):  # the walls round the block
+            (a0, c0), (a1, c1) = footprint[k], footprint[(k + 1) % len(footprint)]
+            flat([at(a0, c0, top), at(a1, c1, top), at(a1, c1, bottom), at(a0, c0, bottom)], FIN * 0.78, 0.2)
+        span_a0, span_a1 = inner + 0.16 * (outer - inner), outer - 0.24 * (outer - inner)
+        span_c = half * 0.70
+        pitch_a, pitch_c = (span_a1 - span_a0) / FIN_WINDOWS, 2 * span_c / FIN_WINDOWS
+        for i in range(FIN_WINDOWS):  # the open windows: dark squares, a bar between each
+            for j in range(FIN_WINDOWS):
+                a_lo, c_lo = span_a0 + pitch_a * (i + 0.17), -span_c + pitch_c * (j + 0.17)
+                a_hi, c_hi = a_lo + pitch_a * 0.66, c_lo + pitch_c * 0.66
+                for level in (top + 0.0004, bottom - 0.0004):
+                    flat([at(a_lo, c_lo, level), at(a_hi, c_lo, level), at(a_hi, c_hi, level), at(a_lo, c_hi, level)], FIN_HOLE, 0.0)
 
     # the ship: nose, then the barrel in weld bands down to the bottom
     barrel_top = 0.5 - NOSE_SHARE * SHIP_LENGTH
@@ -326,39 +341,88 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
                 corners.append([(radius * np.cos(angle - half), height, radius * np.sin(angle - half)), (radius * np.cos(angle + half), height, radius * np.sin(angle + half))])
             flat([corners[0][0], corners[0][1], corners[1][1], corners[1][0]], TILE * 0.7, 0.1)
 
-    # the booster: slotted hot-stage ring, barrel in bands with a dark belt, then the engine skirt and its bells
+    # the booster: an open truss ring round the top, the barrel with a slotted belt, a raceway pipe and two raised strips low down,
+    # then the engine skirt and its 33 bells
     ring_bottom = SPLIT_Y - HOT_STAGE_HEIGHT
+    top_band = SPLIT_Y - TRUSS_BAND
     booster_length = 0.5 + ring_bottom
     belt = (ring_bottom - BOOSTER_BELT[1] * booster_length, ring_bottom - BOOSTER_BELT[0] * booster_length)  # (bottom, top)
     lattice = BODY_RADIUS * 1.03
-    booster_rings: list[tuple[float, float]] = [(SPLIT_Y, lattice), (ring_bottom, lattice), (ring_bottom, BODY_RADIUS)]
+    skirt_bottom = -0.5 + BELL_DROP
+    booster_rings: list[tuple[float, float]] = [(SPLIT_Y, lattice), (top_band, lattice), (top_band - 7e-4, BODY_RADIUS)]
     heights = {belt[0], belt[1], SKIRT_TOP}
     heights.update(ring_bottom + (SKIRT_TOP - ring_bottom) * i / 8 for i in range(1, 8))
-    for height in sorted(heights, reverse=True):
+    heights.update(SKIRT_TOP + (skirt_bottom - SKIRT_TOP) * i / 3 for i in range(1, 3))  # the skirt's pipework bands
+    for height in sorted((h for h in heights if h > skirt_bottom + 1e-3), reverse=True):
         booster_rings.append((height, BODY_RADIUS))
-    bells = [BODY_RADIUS * (0.92 if k % 2 == 0 else 0.70) for k in range(segments)]  # bells and the gaps between them
-    booster_rings.extend([(-0.49, [BODY_RADIUS * 0.97] * segments), (-0.5, bells)])
+    booster_rings.append((skirt_bottom, BODY_RADIUS))
 
     def booster_colour(upper: float, lower: float, k: int, band: int) -> tuple[np.ndarray, float]:
-        if upper >= SPLIT_Y - 1e-9:  # the slotted ring: struts and the dark slots between them
-            return (RING_LIGHT if (k // 2) % 2 == 0 else RING_DARK), 0.3
+        if upper >= top_band - 1e-9:  # the broad ring round the top of the truss
+            return RING_LIGHT, 0.6
+        if lower > top_band - 1.5e-3:  # the thin shoulder under it
+            return RING_DARK, 0.2
         middle = (upper + lower) / 2
-        if middle < SKIRT_TOP:
-            return ENGINES, 0.2
-        if belt[0] <= middle <= belt[1]:
-            return BELT, GLOSS_BOOSTER
+        if middle < SKIRT_TOP:  # the skirt: dark, with lighter pipe runs
+            return ENGINES * (1.5 if int((SKIRT_TOP - middle) / max(SKIRT_TOP - skirt_bottom, 1e-9) * 3) % 2 else 0.8), 0.2
+        if belt[0] <= middle <= belt[1]:  # the belt: a row of slots, one dark slot for each light bar
+            return (BELT if k % 2 == 0 else RING_DARK), GLOSS_BOOSTER
         return STEEL * (1.0 + 0.03 * (((k // 3 + band) % 2) - 0.5)) * (0.985 if k % 7 == 0 else 1.0), GLOSS_STEEL  # the ship's panel pattern
 
     first = tube(booster_rings, booster_colour)
-    for ux, uy in _engine_layout():  # the 33 bells, a dark hexagon each, on the skirt's flat bottom
-        cx, cz = ux * BODY_RADIUS * 0.80, uy * BODY_RADIUS * 0.80
+    cap(top_band + 0.0005, first, STEEL * 0.78)  # the booster's top, seen once the ship has left it
+    cap(SPLIT_Y - 0.001, first, STEEL * 0.78)
+
+    # the hot-stage truss: struts zig-zagging round between the top ring and the dome's shoulder, leaving gaps to see through
+    strut_half = 0.0017
+    for k in range(TRUSS_STRUTS):
+        a0, a1 = 2 * np.pi * k / TRUSS_STRUTS, 2 * np.pi * (k + 1) / TRUSS_STRUTS
+        start, end = (a0, a1) if k % 2 == 0 else (a1, a0)  # top corner, bottom corner
+        ends = []
+        for angle, height in ((start, top_band), (end, ring_bottom)):
+            radius = lattice + 0.0009
+            tangent = np.array([-np.sin(angle), np.cos(angle)]) * strut_half
+            ends.append(((radius * np.cos(angle), height, radius * np.sin(angle)), tangent))
+        (p0, t0), (p1, t1) = ends
         flat(
-            [(cx + BELL_RADIUS * np.cos(a), -0.5, cz + BELL_RADIUS * np.sin(a)) for a in np.linspace(0, 2 * np.pi, 6, endpoint=False)],
-            BELL,
-            0.0,
+            [
+                (p0[0] - t0[0], p0[1], p0[2] - t0[1]),
+                (p0[0] + t0[0], p0[1], p0[2] + t0[1]),
+                (p1[0] + t1[0], p1[1], p1[2] + t1[1]),
+                (p1[0] - t1[0], p1[1], p1[2] - t1[1]),
+            ],
+            RING_LIGHT,
+            0.6,
         )
-    cap(-0.4995, first + (len(booster_rings) - 1) * segments, ENGINES)  # a hair above the bells, so they are drawn over it
-    cap(SPLIT_Y - 0.001, first, RING_DARK)  # the booster's top, seen once the ship has left it (a hair either side of the split, so each belongs to its own stage)
+
+    # the raceway pipe down the steel side, and a raised strip either side of it low on the booster
+    pipe_top, pipe_bottom = ring_bottom - 0.004, SKIRT_TOP
+    pipe_half = (pipe_top - pipe_bottom) / 2
+    decal([(-0.0030, -pipe_half), (0.0030, -pipe_half), (0.0030, pipe_half), (-0.0030, pipe_half)], (pipe_top + pipe_bottom) / 2, RACEWAY, 0.0016)
+    strip_bottom = SKIRT_TOP + 0.002
+    strip_top = strip_bottom + CHINE_HEIGHT * booster_length
+    for side in (-1, 1):
+        centre = side * CHINE_ANGLE * BODY_RADIUS
+        half = CHINE_HALF * BODY_RADIUS
+        tall = strip_top - strip_bottom
+        decal(
+            [(centre - half, -tall / 2), (centre + half, -tall / 2), (centre + half, tall / 2 - 0.012), (centre - half, tall / 2)],
+            (strip_top + strip_bottom) / 2,
+            STEEL * 1.14,
+            0.0026,
+        )
+
+    # the 33 bells: short cones hanging under the skirt, each with a dark mouth
+    for ux, uy in _engine_layout():
+        cx, cz = ux * BODY_RADIUS * 0.80, uy * BODY_RADIUS * 0.80
+        sides = 5
+        angles = np.linspace(0, 2 * np.pi, sides, endpoint=False)
+        upper = [(cx + BELL_RADIUS * 0.8 * np.cos(t), skirt_bottom, cz + BELL_RADIUS * 0.8 * np.sin(t)) for t in angles]
+        lower = [(cx + BELL_RADIUS * np.cos(t), -0.5, cz + BELL_RADIUS * np.sin(t)) for t in angles]
+        for k in range(sides):
+            flat([upper[k], upper[(k + 1) % sides], lower[(k + 1) % sides], lower[k]], ENGINES, 0.2)
+        flat(lower, BELL, 0.0)
+    cap(skirt_bottom - 0.0003, first + (len(booster_rings) - 1) * segments, ENGINES)  # the skirt's flat bottom, which the bells hang from
 
     # grid fins: three lattices just below the ring, on the heat-shield side and out to each side; the steel side is bare
     for turn in (0.0, np.pi / 2, -np.pi / 2):
