@@ -19,7 +19,7 @@ Like every dial model it is one unit long, centred on the origin, nose up along 
 
 import numpy as np
 
-from .mesh import Mesh
+from .mesh import FlapRig, Mesh
 
 SHIP_LENGTH = 0.40  # a little over a third of the stack, so the booster is the longer of the two
 SPLIT_Y = 0.5 - SHIP_LENGTH  # where the ship's bottom meets the booster, in model height
@@ -131,6 +131,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
     solid: list[bool] = []  # per face: part of a closed body round the axis
 
     draw_lift = 0.0
+    flap_rigs: list[FlapRig] = []  # the four flaps' vertices and hinges, so they can be swung afterwards
 
     def add_face(corners: tuple[int, int, int], colour: np.ndarray, shine: float, closed: bool) -> None:
         faces.append(corners)
@@ -214,7 +215,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
             add_face((a, c, b), colour, shine, False)
             add_face((b, c, d), colour, shine, False)
 
-    def flap(angle: float, outline: list[tuple[float, float]], thickness: float, steel_up: bool) -> None:
+    def flap(angle: float, outline: list[tuple[float, float]], thickness: float, steel_up: bool, forward: bool, mirror: int) -> None:
         """A flap: a slab sticking out of the ship at this angle round its axis. `outline` is (out from the body, height). One face
         is black tile (the one toward the heat shield) and the other bare steel; `steel_up` says which of the two is which."""
         direction = np.array([np.cos(angle), np.sin(angle)])
@@ -227,7 +228,10 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
                 x, z = direction * (root if out == 0.0 else BODY_RADIUS * 0.96 + out) + sideways * level
                 row.append((x, height, z))
             rows.append(row)
+        first = len(vertices)
         slab(rows, FLAP, GLOSS_FLAP, FLAP_STEEL if steel_up else FLAP, FLAP if steel_up else FLAP_STEEL)
+        pivot = direction * BODY_RADIUS * 0.96  # the hinge: the flap's root on the body, a vertical line
+        flap_rigs.append(FlapRig(first, len(vertices) - first, (float(pivot[0]), float(pivot[1])), forward, mirror))
 
     def grid_fin(angle: float, height: float) -> None:
         """A grid fin: a thick octagonal block sticking out sideways from the booster, with a lattice of open windows in its faces."""
@@ -481,8 +485,8 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
     # seen from above (the nose pointing at you, the heat shield below): the forward flaps lean back toward the steel
     # side, the aft flaps stick out straight to each side
     for mirror in (1, -1):
-        flap(TILE_CENTRE + mirror * (np.pi / 2 + FORWARD_FLAP_LEAN), forward, FORWARD_FLAP_THICKNESS, mirror == 1)
-        flap(TILE_CENTRE + mirror * (np.pi / 2 - AFT_FLAP_LEAN), aft, AFT_FLAP_THICKNESS, mirror == 1)
+        flap(TILE_CENTRE + mirror * (np.pi / 2 + FORWARD_FLAP_LEAN), forward, FORWARD_FLAP_THICKNESS, mirror == 1, True, mirror)
+        flap(TILE_CENTRE + mirror * (np.pi / 2 - AFT_FLAP_LEAN), aft, AFT_FLAP_THICKNESS, mirror == 1, False, mirror)
 
     return Mesh(
         np.asarray(vertices, dtype=np.float32),
@@ -493,4 +497,5 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         vertex_normals=np.asarray(normals, dtype=np.float32),
         face_gloss=np.asarray(gloss, dtype=np.float32),
         face_lift=np.asarray(lift, dtype=np.float32),
+        flaps=tuple(flap_rigs),
     )

@@ -48,4 +48,5 @@ def live_telemetry(clock: CountdownClock, status: ReaderStatus) -> Telemetry:
         booster_altitude_km=None if sample.booster_altitude_m is None else sample.booster_altitude_m / 1000.0,
         booster_live=sample.booster_live,
         on_booster=sample.has_booster_cluster,
+        flap_folds_deg=sample.flap_folds_deg,
     )

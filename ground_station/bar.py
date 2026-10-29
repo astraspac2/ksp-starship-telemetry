@@ -82,6 +82,8 @@ ATTITUDE_EASE_SECONDS = 0.07  # the 3D dial closes about two thirds of the way t
 ATTITUDE_SNAP_COSINE = 0.34  # a turn of more than about 70 degrees (a new vessel, a reset) is shown at once
 ATTITUDE_RESET_SECONDS = 0.5  # after a pause this long (the dial was hidden) it starts again from the real attitude
 ATTITUDE_REDRAW_DELTA = 0.0015  # about a tenth of a degree
+FLAP_SPEED = 45.0  # degrees a second the dial's flaps swing at, toward what the game reports
+FLAP_STEP = 3.0  # the flaps are redrawn in steps of this many degrees (each new picture of the model costs a few tens of milliseconds)
 DOT_FADE_SECONDS = 0.12  # an engine dot closes about two thirds of the way to lit or dim in this long
 NO_DATA_TEXT = "NO DATA"  # what the booster's gauges say once it cannot be read
 NO_DATA_SCALE = 0.5  # in letters this much of the numbers' size, so the words fit inside the ring
@@ -148,6 +150,8 @@ class TelemetryBar(HudWindow):
         self._smoothing = True  # ease the 3D dial and the engine dots between readings (off for exact still frames)
         self._attitude: np.ndarray | None = None  # the orientation the 3D dial is showing, eased toward the real one
         self._attitude_time = 0.0
+        self._flap_shown: tuple[float, ...] | None = None  # the folds of the four flaps as drawn, easing toward the game's
+        self._flap_time = 0.0
         self._attitude_drawn: tuple[np.ndarray, int, bool, object] | None = None  # orientation, separation step, booster only, picture
         self._ship_scale = 1.0  # the rocket's size in the dial once only the ship is left
         self._flying_booster = False  # the vessel flown is the booster after the separation: its own dial, live
@@ -277,6 +281,22 @@ class TelemetryBar(HudWindow):
         done = min(max((tel.t - tel.separated_at) / SEPARATION_ANIMATION_SECONDS, 0.0), 1.0)
         return 1.0 + (self._ship_scale - 1.0) * done * done * (3.0 - 2.0 * done)
 
+    def _swing_flaps(self, target: tuple[float, ...] | None, now: float) -> bool:
+        """Move the model's flaps toward the folds the game reports (at most FLAP_SPEED degrees a second, so they swing instead of
+        jumping), in steps of FLAP_STEP degrees so a new picture is only drawn when it shows. Returns whether the picture must be redrawn.
+        Without readings the flaps go back to the pose the model was built in."""
+        elapsed = min(max(now - self._flap_time, 0.0), 0.25)
+        self._flap_time = now
+        if target is None or len(target) != 4:
+            self._flap_shown = None
+        elif self._flap_shown is None:
+            self._flap_shown = tuple(target)
+        else:
+            reach = FLAP_SPEED * elapsed
+            self._flap_shown = tuple(shown + max(-reach, min(reach, goal - shown)) for shown, goal in zip(self._flap_shown, target))
+        steps = None if self._flap_shown is None else tuple(round(value / FLAP_STEP) * FLAP_STEP for value in self._flap_shown)
+        return self._renderer.set_flap_folds(steps)
+
     def _rocket_image(self, tel: Telemetry):
         """The 3D rocket for this attitude, or None when the heading is unknown (the dial then draws it flat)."""
         if tel.pitch_deg is None or tel.heading_deg is None:
@@ -296,9 +316,10 @@ class TelemetryBar(HudWindow):
                 right /= np.linalg.norm(right)
                 shown = np.column_stack([right, nose, np.cross(right, nose)])  # keep it a true rotation
         self._attitude, self._attitude_time = shown, now
+        flaps_moved = self._swing_flaps(tel.flap_folds_deg, now)
         if self._attitude_drawn is not None:
             last, last_step, last_booster, picture = self._attitude_drawn
-            if last_step == step and last_booster == booster_only and float(np.abs(last - shown).max()) < ATTITUDE_REDRAW_DELTA:
+            if not flaps_moved and last_step == step and last_booster == booster_only and float(np.abs(last - shown).max()) < ATTITUDE_REDRAW_DELTA:
                 return picture  # it has not moved enough to show: keep the picture
         picture = self._renderer.render_matrix(shown, separation, booster_only)
         self._attitude_drawn = (shown, step, booster_only, picture)

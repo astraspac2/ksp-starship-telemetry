@@ -16,6 +16,7 @@ from typing import Callable
 from . import sep_cluster
 from .booster import BoosterTracker
 from .branding import KRPC_CLIENT_NAME
+from .flaps import FlapTracker
 from .attitude import attitude_from_rotation
 
 STALE_AFTER_SECONDS = 1.0
@@ -72,6 +73,7 @@ class LiveSample:
     booster_altitude_m: float | None = None
     booster_live: bool = False
     has_booster_cluster: bool = False  # the vessel being flown carries the booster's engine cluster (the stack, or the booster itself)
+    flap_folds_deg: tuple[float, ...] | None = None  # how far in each of the ship's four flaps is folded from deployed (see flaps.py); None = not known
 
 
 @dataclass(frozen=True)
@@ -406,6 +408,7 @@ class KrpcReader:
         self.altitude_mode = "surface"  # "surface" (above ground/sea) or "sea" (above sea level); may change while running
         self._rated_memory: dict[str, float] = {}
         self._booster = BoosterTracker(booster_log)
+        self._flaps = FlapTracker()
 
     def _default_connect(self):
         import krpc
@@ -478,6 +481,7 @@ class KrpcReader:
     def _poll(self, conn) -> None:
         streams = _Streams(conn, lambda: self.altitude_mode, self._rated_memory)
         self._booster.reset()
+        self._flaps.reset()
         with self._lock:
             self._server_version = self._read_server_version(conn)
         self._set(ConnState.CONNECTED, None)
@@ -489,6 +493,7 @@ class KrpcReader:
                 vessel_changed = conn.space_center.active_vessel.name != streams.vessel_name
                 if vessel_changed or streams.current_stage() != streams.built_at_stage:
                     streams = _Streams(conn, lambda: self.altitude_mode, self._rated_memory)  # staging drops parts: read afresh
+                    self._flaps.reset()
                 else:
                     streams.refresh_stage()
             sample = streams.read(now)
@@ -496,6 +501,9 @@ class KrpcReader:
             booster = self._booster.update(now, conn.space_center, bool(streams.sep), self.altitude_mode, conn)
             if booster.live:
                 sample = replace(sample, booster_speed_ms=booster.speed_ms, booster_altitude_m=booster.altitude_m, booster_live=True)
+            folds = self._flaps.update(now, conn)
+            if folds is not None:
+                sample = replace(sample, flap_folds_deg=folds)
             with self._lock:
                 self._sample = sample
             self._stop.wait(self._poll_interval)

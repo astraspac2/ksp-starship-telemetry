@@ -79,6 +79,32 @@ class ModelRenderer:
         self.size_px = size_px
         self._cache: dict[tuple[int, int, int, int], QImage] = {}
         self._view = view_matrix()
+        self._rest_vertices = self._vertices  # the model as built; the flaps are swung from here
+        self._flap_rigs = mesh.flaps
+        self._folds: tuple[float, ...] | None = None
+
+    @property
+    def has_flaps(self) -> bool:
+        return bool(self._flap_rigs)
+
+    def set_flap_folds(self, folds: tuple[float, ...] | None) -> bool:
+        """Swing the model's flaps: `folds` is how far in each is folded from fully deployed, in degrees, in the order forward-left,
+        forward-right, aft-left, aft-right; None puts them back as built. Returns whether anything changed (so a new picture is needed)."""
+        if not self._flap_rigs or folds == self._folds:
+            return False
+        self._folds = folds
+        vertices = self._rest_vertices.copy() if folds is not None else self._rest_vertices
+        if folds is not None:
+            for rig in self._flap_rigs:
+                angle = -rig.mirror * math.radians(folds[(0 if rig.forward else 2) + (0 if rig.mirror == 1 else 1)])
+                cos, sin = math.cos(angle), math.sin(angle)
+                span = slice(rig.first, rig.first + rig.count)
+                dx, dz = vertices[span, 0] - rig.pivot[0], vertices[span, 2] - rig.pivot[1]
+                vertices[span, 0] = rig.pivot[0] + dx * cos - dz * sin
+                vertices[span, 2] = rig.pivot[1] + dx * sin + dz * cos
+        self._vertices = vertices
+        self._cache.clear()
+        return True
 
     @staticmethod
     def _smooth_normals(mesh: Mesh) -> np.ndarray:

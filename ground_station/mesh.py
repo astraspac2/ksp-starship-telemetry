@@ -20,6 +20,17 @@ class ModelError(Exception):
     """A model file could not be used; the message says why, for the operator."""
 
 
+@dataclass(frozen=True)
+class FlapRig:
+    """A flap that can swing: its vertices are `count` from `first`, and it turns about the vertical line through `pivot` (x, z)."""
+
+    first: int
+    count: int
+    pivot: tuple[float, float]
+    forward: bool  # a forward flap (just below the nose) rather than an aft one
+    mirror: int  # +1 or -1: which side of the ship; folding turns it by -mirror times the fold angle
+
+
 @dataclass
 class Mesh:
     vertices: np.ndarray  # (N, 3) float32
@@ -30,6 +41,7 @@ class Mesh:
     vertex_normals: np.ndarray | None = None  # (N, 3) float32 outward normals, so a round body shades smoothly instead of in facets
     face_gloss: np.ndarray | None = None  # (M,) float32 0..1: how shiny each face is (a highlight where it catches the light)
     face_lift: np.ndarray | None = None  # (M,) float32: how much nearer to draw a face than its depth says, for parts lying on a surface
+    flaps: tuple[FlapRig, ...] = ()  # the parts that swing with the real vehicle's flaps, if the model has any
 
     @property
     def triangle_count(self) -> int:
