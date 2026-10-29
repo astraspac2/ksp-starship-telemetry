@@ -15,7 +15,7 @@ from ground_station.render3d import ModelRenderer
 from ground_station.starship_model import starship_stack
 from ground_station.telemetry import mock_telemetry
 
-OUT = {"Deploy": "False", "Deploy Angle": "50", "Authority Limiter": "40", "Pitch": "False", "Yaw": "False", "Roll": "False"}  # on the pad, flaps out
+OUT = {"Deploy": "False", "Deploy Angle": "50", "Authority Limiter": "40", "Pitch": "True", "Yaw": "True", "Roll": "True"}  # on the pad, flaps out; the axes read True here = the flap does not answer them
 RETRACTED = {**OUT, "Deploy": "True"}  # the game's Deploy field is True while the flaps are retracted
 
 
@@ -33,10 +33,10 @@ def test_flaps_out_are_the_pose_the_model_is_drawn_in_and_retracting_folds_each_
 
 def test_the_stick_moves_only_the_flaps_that_answer_that_axis():
     assert fold_degrees(OUT, True, True, 1.0, 0, 0) == 0.0  # pitch is off for this flap: the stick does nothing
-    pitching = {**OUT, "Pitch": "True"}
+    pitching = {**OUT, "Pitch": "False"}  # False = the flap answers pitch
     forward, aft = fold_degrees(pitching, True, True, 1.0, 0, 0), fold_degrees(pitching, False, True, 1.0, 0, 0)
     assert (forward, aft) == (-40.0, 40.0)  # forward and aft go against each other; full stick is the authority limiter (40)
-    rolling = {**OUT, "Roll": "True"}
+    rolling = {**OUT, "Roll": "False"}
     assert fold_degrees(rolling, True, True, 0, 0, 1.0) != fold_degrees(rolling, True, False, 0, 0, 1.0)  # left and right go against each other
 
 
@@ -215,3 +215,9 @@ def test_when_the_readings_stop_the_flaps_stay_as_they_were_last_seen(qapp):
     bar._rocket_image(bar._telemetry)
     assert bar._flap_shown == (0.0,) * 4  # not snapped back to retracted
     assert FLAP_STEP > 0
+
+
+def test_a_flap_whose_fields_read_false_for_the_axes_follows_the_stick_as_the_games_panel_says_active():
+    as_in_the_game = {**RETRACTED, "Pitch": "False", "Yaw": "False", "Roll": "False"}  # what the recorded flaps read: "Active" in the panel
+    assert fold_degrees(as_in_the_game, True, True, 1.0, 0, 0) != fold_degrees(as_in_the_game, True, True, 0.0, 0, 0)
+    assert fold_degrees(as_in_the_game, True, True, 0, 0, 1.0) != fold_degrees(as_in_the_game, True, True, 0, 0, 0.0)

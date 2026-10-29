@@ -1,7 +1,7 @@
 """Follow the ship's four flaps in the game, so the dial's ship can fold and swing them the same way. Qt-free.
 
 The Starship Expansion Project flaps carry a `ModuleSEPControlSurface` with these fields (recorded with run_flap_probe.py):
-Deploy, Deploy Angle and Authority Limiter (both degrees), and Pitch, Yaw and Roll (whether the flap answers that axis). Deploy
+Deploy, Deploy Angle and Authority Limiter (both degrees), and Pitch, Yaw and Roll (False while the flap answers that axis, as with Deploy). Deploy
 reads True while the flaps are RETRACTED (tucked toward the steel side, a little ahead of lift-off) and False on the pad with the
 flaps out, as pictured. The game does not report the angle a flap is at this moment, so it is worked out from those fields and the
 stick input times the authority limiter on the axes the flap answers. Nothing here sends anything to the game.
@@ -44,9 +44,9 @@ def fold_degrees(fields: dict, forward: bool, left: bool, pitch: float, yaw: flo
     limiter = _number(fields.get("Authority Limiter"), 0.0)
     retracted = _flag(fields.get("Deploy"))  # the field is True while the flaps are RETRACTED: on the pad, flaps out, it reads False
     stick = 0.0
-    if _flag(fields.get("Pitch")):
+    if not _flag(fields.get("Pitch")):  # like Deploy, these read False while the flap answers the axis (the part's panel says "Active")
         stick += pitch * PITCH_SIGN_FORWARD * (1.0 if forward else -1.0)
-    if _flag(fields.get("Roll")):
+    if not _flag(fields.get("Roll")):
         stick += roll * ROLL_SIGN_LEFT * (1.0 if left else -1.0)
     stick = max(-1.0, min(1.0, stick))  # yaw is not drawn: how the ship's flaps answer it is not known
     fold = (deploy_angle if retracted else 0.0) - limiter * stick
