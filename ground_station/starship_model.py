@@ -26,7 +26,7 @@ SPLIT_Y = 0.5 - SHIP_LENGTH  # where the ship's bottom meets the booster, in mod
 BODY_RADIUS = 0.034  # the ship is about 5.9 diameters long, as measured on the picture of it
 DIAMETER = 2 * BODY_RADIUS
 NOSE_SHARE = 0.175  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
-NOSE_BLACK_SHARE = 0.85  # of the nose is black tile all the way round, even on the steel side
+NOSE_BLACK_SHARE = 0.97  # of the nose is black tile all the way round, even on the steel side
 HOT_STAGE_HEIGHT = 0.022
 SKIRT_TOP = -0.47  # the engine skirt runs from here down to the bells at -0.5
 SEGMENTS = 28  # round the axis: enough that the silhouette is smooth at the dial's size
@@ -77,10 +77,15 @@ BOOSTER_BELT = (0.345, 0.375)  # as fractions of the booster's length from its t
 BELL_RADIUS = 0.0033  # one engine bell on the booster's bottom
 
 
+DOME_SHARE = 0.8  # of the nose's length: the rounded dome reaches full width this far down, the rest is black barrel
+
+
 def _nose_radius(s: float) -> float:
-    """The nose: radius at fraction s (0 at the tip, 1 where the nose meets the barrel). A rounded cone that meets the barrel
-    tangentially, so there is no crease where the nose starts, with a rounded tip, not a spike (the pictures of the real nose)."""
-    return BODY_RADIUS * float(np.sin(0.5 * np.pi * min(max(s, 0.0), 1.0) ** 0.85))
+    """The nose: radius at fraction s (0 at the tip, 1 at the end of the black cap). A round bullet dome, blunt at the tip and about
+    a diameter long (the picture of the real nose: more than half the width already a tenth of the way down), reaching the barrel's
+    width tangentially and carrying on as barrel."""
+    u = min(max(s / DOME_SHARE, 0.0), 1.0)
+    return BODY_RADIUS * float(np.sin(0.5 * np.pi * u ** 0.52))
 
 
 def _body_radius(height: float) -> float:
@@ -235,8 +240,8 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
 
     belts = [(ship_height(a), ship_height(b)) for a, b in SHIP_BELTS]  # (top, bottom) heights
     ship_rings: list[tuple[float, float]] = [(0.5, 0.0)]
-    for step in range(1, 15):
-        s = (step / 14) ** 1.35  # more rings near the tip, where it curves most
+    dome_steps = [DOME_SHARE * (step / 12) ** 1.3 for step in range(1, 13)]  # more rings near the tip, where it curves most
+    for s in dome_steps + [DOME_SHARE + (1.0 - DOME_SHARE) * 0.5, 1.0]:
         ship_rings.append((0.5 - NOSE_SHARE * SHIP_LENGTH * s, _nose_radius(s)))
     edges = {SPLIT_Y}
     for top, bottom in belts:
