@@ -342,6 +342,12 @@ def draw_attitude_dial(
     outline.setAlpha(135)
     painter.setPen(QPen(outline, 1.3))
     painter.setBrush(Qt.NoBrush)
+    painter.drawArc(QRectF(center.x() - radius, center.y() - radius, 2 * radius, 2 * radius), 0, 180 * 16)  # the far half of the circle, behind the rocket
+    painter.drawArc(
+        QRectF(center.x() - radius, center.y() - radius * math.sin(math.radians(VIEW_ELEVATION_DEG)), 2 * radius, 2 * radius * math.sin(math.radians(VIEW_ELEVATION_DEG))),
+        0,
+        180 * 16,
+    )  # and of the horizon ellipse
 
     faint = QColor(outline)
     faint.setAlpha(95)
@@ -360,13 +366,16 @@ def draw_attitude_dial(
     painter.setPen(theme.soft)
     painter.drawText(QRectF(label_centre.x() - 12, label_centre.y() - 12, 24, 24), Qt.AlignCenter, "N")
 
-    def outer_ring() -> None:
-        """The dial's outlines (the outer circle and the horizon ellipse), drawn last so the rocket, which is bigger than the dial, passes
-        behind them. The compass lines through the middle stay under the rocket."""
+    def outline_arcs(start_degrees: int) -> None:
+        """Half of each of the dial's outlines (the outer circle and the horizon ellipse): the upper half from 0 degrees, the lower from 180."""
         painter.setPen(QPen(outline, 1.3))
         painter.setBrush(Qt.NoBrush)
-        painter.drawEllipse(center, radius, radius)
-        painter.drawEllipse(center, radius, radius * math.sin(math.radians(VIEW_ELEVATION_DEG)))  # the horizon plane
+        for height in (radius, radius * math.sin(math.radians(VIEW_ELEVATION_DEG))):
+            painter.drawArc(QRectF(center.x() - radius, center.y() - height, 2 * radius, 2 * height), start_degrees * 16, 180 * 16)
+
+    def outer_ring() -> None:
+        """The near (lower) half of the outlines, drawn last so the rocket, which is bigger than the dial, passes behind it."""
+        outline_arcs(180)
 
     if pitch_deg is None:
         outer_ring()
