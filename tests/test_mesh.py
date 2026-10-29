@@ -262,3 +262,29 @@ def test_a_prepared_model_is_thinned_out_only_once_per_file_and_flip(tmp_path, m
     assert mesh_module.load_prepared(path, False) is first and len(calls) == 1  # the second ask costs nothing
     mesh_module.load_prepared(path, True)
     assert len(calls) == 2  # a different flip is a different model
+
+
+def test_a_thinned_out_model_keeps_its_width_and_its_pointed_end_up():
+    from ground_station.mesh import Mesh, decimate, normalize
+
+    segments, rings = 24, 60  # a tall closed cylinder with a pointed top, finely meshed, upside down on purpose
+    vertices, faces = [], []
+    for ring in range(rings + 1):
+        y = ring / rings * 10.0
+        radius = 1.0 if ring < rings - 5 else max(1.0 - (ring - (rings - 6)) / 6.0, 0.02)
+        for k in range(segments):
+            angle = 2 * np.pi * k / segments
+            vertices.append((radius * np.cos(angle), -y, radius * np.sin(angle)))  # the point is at the bottom
+    for ring in range(rings):
+        for k in range(segments):
+            a, b = ring * segments + k, ring * segments + (k + 1) % segments
+            c, d = a + segments, b + segments
+            faces.extend([(a, c, b), (b, c, d)])
+    mesh = Mesh(np.asarray(vertices, dtype=np.float32), np.asarray(faces, dtype=np.int32))
+    thin = decimate(mesh, 300)
+    assert 0 < thin.triangle_count <= 300
+    width = np.hypot(thin.vertices[:, 0], thin.vertices[:, 2]).max()
+    assert width == pytest.approx(1.0, abs=0.1)  # a plain average of each cell would pull the round body in
+    standing = normalize(mesh, max_triangles=300)
+    radial = np.hypot(standing.vertices[:, 0], standing.vertices[:, 2])
+    assert radial[standing.vertices[:, 1] > 0.45].mean() < radial[standing.vertices[:, 1] < -0.45].mean()  # the narrow end is up

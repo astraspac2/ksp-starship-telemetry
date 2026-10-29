@@ -259,6 +259,7 @@ class TelemetryBar(HudWindow):
             except ModelError as exc:
                 error = str(exc)
         self._renderer = ModelRenderer(mesh, round(rocket_pixels(DIAL_RADIUS)))
+        self._attitude_drawn = None  # the picture drawn for the old model must not be shown again
         self.model_triangles = mesh.triangle_count
         self.update()
         return error
