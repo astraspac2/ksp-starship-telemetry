@@ -10,6 +10,9 @@ Folds are in degrees, in the order of FLAPS: how far a flap is swung round the h
 model is drawn in, which is the flaps straight out sideways (fold 0). A retracted flap is folded by the deploy angle.
 """
 
+import csv
+from pathlib import Path
+
 MODULE_NAME = "ModuleSEPControlSurface"
 # (part name, forward?, left?): the model's "left" side is the one drawn as mirror +1
 FLAPS = (
@@ -56,10 +59,20 @@ def fold_degrees(fields: dict, forward: bool, left: bool, pitch: float, yaw: flo
     return max(FOLD_LIMITS[0], min(FOLD_LIMITS[1], fold))
 
 
-class FlapTracker:
-    """Finds the flown vessel's four flaps and reads how far each is folded, a few times a second."""
+LOG_FIELDS = ("Deploy", "Pitch", "Yaw", "Roll", "Deploy Angle", "Authority Limiter")
+LOG_LIMIT = 4000  # rows: the record is for finding out what the game said, not for keeping
 
-    def __init__(self):
+
+class FlapTracker:
+    """Finds the flown vessel's four flaps and reads how far each is folded, a few times a second.
+
+    With a `log_path` it also writes a row whenever a flap's fields, the stick input or the folds change, so what the game
+    said can be looked at afterwards."""
+
+    def __init__(self, log_path: Path | None = None):
+        self._log_path = log_path
+        self._logged = 0
+        self._last_logged = None
         self.reset()
 
     def reset(self) -> None:
@@ -85,13 +98,44 @@ class FlapTracker:
                 return None
             control = self._vessel.control
             pitch, yaw, roll = control.pitch, control.yaw, control.roll
+            read = [dict(module.fields) for module in self._modules]
             self._folds = tuple(
-                fold_degrees(dict(module.fields), forward, left, pitch, yaw, roll)
-                for module, (_, forward, left) in zip(self._modules, FLAPS)
+                fold_degrees(fields, forward, left, pitch, yaw, roll) for fields, (_, forward, left) in zip(read, FLAPS)
             )
-        except Exception:  # the vessel changed or the game is busy: look again shortly
+            self._log(now, read, (pitch, yaw, roll))
+        except Exception as exc:  # the vessel changed or the game is busy: look again shortly
             self._modules, self._folds = None, None
+            self._log(now, None, None, f"{type(exc).__name__}: {exc}")
         return self._folds
+
+    def _log(self, now: float, read, inputs, error: str = "") -> None:
+        """One row when anything about the flaps changed since the last row."""
+        if self._log_path is None or self._logged >= LOG_LIMIT:
+            return
+        row = [round(now, 2), error]
+        if inputs is not None:
+            row += [round(x, 2) for x in inputs]
+        for index in range(FLAP_COUNT):
+            fields = {} if read is None else read[index]
+            row += [fields.get(name, "") for name in LOG_FIELDS]
+            row.append("" if self._folds is None else round(self._folds[index], 1))
+        key = tuple(row[2:])
+        if key == self._last_logged:
+            return
+        self._last_logged = key
+        try:
+            new_file = self._logged == 0
+            with open(self._log_path, "w" if new_file else "a", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle)
+                if new_file:
+                    writer.writerow(
+                        ["t", "error", "input_pitch", "input_yaw", "input_roll"]
+                        + [f"{label}_{name}" for label in ("fwd_left", "fwd_right", "aft_left", "aft_right") for name in (*LOG_FIELDS, "fold")]
+                    )
+                writer.writerow(row)
+            self._logged += 1
+        except OSError:
+            self._logged = LOG_LIMIT  # not writable: stop trying
 
     def _scan(self, conn) -> None:
         vessel = conn.space_center.active_vessel

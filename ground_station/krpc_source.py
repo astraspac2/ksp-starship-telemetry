@@ -408,7 +408,7 @@ class KrpcReader:
         self.altitude_mode = "surface"  # "surface" (above ground/sea) or "sea" (above sea level); may change while running
         self._rated_memory: dict[str, float] = {}
         self._booster = BoosterTracker(booster_log)
-        self._flaps = FlapTracker()
+        self._flaps = FlapTracker(None if booster_log is None else booster_log.with_name("flap-trace.csv"))
 
     def _default_connect(self):
         import krpc

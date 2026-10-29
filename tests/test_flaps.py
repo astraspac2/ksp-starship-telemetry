@@ -234,3 +234,31 @@ def test_yaw_works_the_diagonal_pairs_against_each_other_and_only_where_the_flap
 def test_a_retracted_flap_does_not_follow_the_stick():
     retracted = {**RETRACTED, "Pitch": "False", "Yaw": "False", "Roll": "False"}
     assert fold_degrees(retracted, True, True, 1.0, 1.0, 1.0) == fold_degrees(retracted, True, True, 0, 0, 0) == 50.0
+
+
+def test_the_tracker_logs_a_row_only_when_something_about_the_flaps_changes(tmp_path):
+    log = tmp_path / "flap-trace.csv"
+    tracker = FlapTracker(log)
+    vessel = FakeVessel(OUT)
+    tracker.update(0.0, conn_with(vessel))
+    tracker.update(0.3, conn_with(vessel))  # nothing changed: no row
+    vessel.control.pitch = 0.5
+    tracker.update(0.6, conn_with(vessel))  # the stick moved: a row
+    lines = log.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 3 and lines[0].startswith("t,error,input_pitch")
+    assert "fwd_left_Deploy" in lines[0] and ",0.5," in lines[2]
+
+
+def test_a_failure_is_logged_with_its_reason(tmp_path):
+    class Dying(FakeVessel):
+        @property
+        def control(self):
+            raise RuntimeError("gone")
+
+        @control.setter
+        def control(self, _):
+            pass
+
+    log = tmp_path / "flap-trace.csv"
+    FlapTracker(log).update(0.0, conn_with(Dying()))
+    assert "RuntimeError: gone" in log.read_text(encoding="utf-8")
