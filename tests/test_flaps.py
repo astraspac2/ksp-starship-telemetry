@@ -25,17 +25,17 @@ def qapp():
 
 
 # what the game reports -> how far in a flap is
-def test_retracted_flaps_rest_nearly_sideways_and_deploying_swings_each_by_the_deploy_angle_toward_the_belly():
+def test_retracted_flaps_rest_straight_out_sideways_and_deploying_swings_each_by_the_deploy_angle_toward_the_belly():
     for forward in (True, False):
-        assert fold_degrees(RETRACTED, forward, True, 0, 0, 0) == RETRACTED_FOLD == 20.0
+        assert fold_degrees(RETRACTED, forward, True, 0, 0, 0) == RETRACTED_FOLD == 0.0
         assert fold_degrees(DEPLOYED, forward, True, 0, 0, 0) == RETRACTED_FOLD - 50.0  # swung toward the belly
 
 
 def test_the_stick_moves_only_the_flaps_that_answer_that_axis():
-    assert fold_degrees(DEPLOYED, True, True, 1.0, 0, 0) == -30.0  # pitch is off for this flap: the stick does nothing
+    assert fold_degrees(DEPLOYED, True, True, 1.0, 0, 0) == -50.0  # pitch is off for this flap: the stick does nothing
     pitching = {**DEPLOYED, "Pitch": "True"}
     forward, aft = fold_degrees(pitching, True, True, 1.0, 0, 0), fold_degrees(pitching, False, True, 1.0, 0, 0)
-    assert (forward, aft) == (-70.0, 10.0)  # forward and aft go against each other; full stick is the authority limiter (40)
+    assert (forward, aft) == (-90.0, -10.0)  # forward and aft go against each other; full stick is the authority limiter (40)
     rolling = {**DEPLOYED, "Roll": "True"}
     assert fold_degrees(rolling, True, True, 0, 0, 1.0) != fold_degrees(rolling, True, False, 0, 0, 1.0)  # left and right go against each other
 
@@ -66,7 +66,7 @@ def conn_with(vessel):
 
 def test_the_four_flaps_are_read_in_order():
     tracker = FlapTracker()
-    assert tracker.update(0.0, conn_with(FakeVessel(RETRACTED))) == (20.0,) * 4
+    assert tracker.update(0.0, conn_with(FakeVessel(RETRACTED))) == (0.0,) * 4
     assert len(FLAPS) == 4
 
 
@@ -75,17 +75,17 @@ def test_a_vessel_without_the_four_flaps_gives_nothing_and_is_looked_at_again_la
     broken = FakeVessel(missing={FLAPS[0][0]})
     assert tracker.update(0.0, conn_with(broken)) is None
     assert tracker.update(1.0, conn_with(FakeVessel())) is None  # not rescanned yet
-    assert tracker.update(10.0, conn_with(FakeVessel())) == (-30.0,) * 4
+    assert tracker.update(10.0, conn_with(FakeVessel())) == (-50.0,) * 4
 
 
 def test_readings_are_not_asked_for_more_than_a_few_times_a_second():
     tracker = FlapTracker()
     vessel = FakeVessel(DEPLOYED)
-    assert tracker.update(0.0, conn_with(vessel)) == (-30.0,) * 4
+    assert tracker.update(0.0, conn_with(vessel)) == (-50.0,) * 4
     vessel.parts = SimpleNamespace(with_name=lambda name: [FakePart(name, dict(RETRACTED))])
-    assert tracker.update(0.05, conn_with(vessel)) == (-30.0,) * 4  # too soon: the old reading
+    assert tracker.update(0.05, conn_with(vessel)) == (-50.0,) * 4  # too soon: the old reading
     tracker.reset()
-    assert tracker.update(0.3, conn_with(vessel)) == (20.0,) * 4
+    assert tracker.update(0.3, conn_with(vessel)) == (0.0,) * 4
 
 
 def test_a_game_that_stops_answering_gives_nothing_instead_of_old_flaps():
