@@ -341,7 +341,6 @@ def draw_attitude_dial(
     outline.setAlpha(135)
     painter.setPen(QPen(outline, 1.3))
     painter.setBrush(Qt.NoBrush)
-    painter.drawEllipse(center, radius, radius * math.sin(math.radians(VIEW_ELEVATION_DEG)))  # the horizon plane
 
     faint = QColor(outline)
     faint.setAlpha(95)
@@ -361,10 +360,12 @@ def draw_attitude_dial(
     painter.drawText(QRectF(label_centre.x() - 12, label_centre.y() - 12, 24, 24), Qt.AlignCenter, "N")
 
     def outer_ring() -> None:
-        """The dial's outer circle, drawn last so the rocket, which is bigger than the dial, passes behind it."""
+        """The dial's outlines (the outer circle and the horizon ellipse), drawn last so the rocket, which is bigger than the dial, passes
+        behind them. The compass lines through the middle stay under the rocket."""
         painter.setPen(QPen(outline, 1.3))
         painter.setBrush(Qt.NoBrush)
         painter.drawEllipse(center, radius, radius)
+        painter.drawEllipse(center, radius, radius * math.sin(math.radians(VIEW_ELEVATION_DEG)))  # the horizon plane
 
     if pitch_deg is None:
         outer_ring()
