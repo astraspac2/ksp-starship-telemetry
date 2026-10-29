@@ -46,7 +46,12 @@ class GroundStationApp:
     def __init__(self, argv: list[str]):
         self.app = QApplication(argv)
         load_bundled_fonts()
-        self.session = Session(settings_io.load(), trace=StagingTrace(settings_io.default_path().with_name("staging-trace.csv")))
+        folder = settings_io.default_path()
+        self.session = Session(
+            settings_io.load(),
+            trace=StagingTrace(folder.with_name("staging-trace.csv")),
+            booster_log=folder.with_name("booster-loss.csv"),
+        )
         self.pill = PillWidget(subtitle=self.session.settings.mission_label)
         self.bar = TelemetryBar(subtitle=self.session.settings.mission_label, milestones=self.session.milestones())
         self._scale_placed = None  # the HUD scale and view the windows were last positioned for

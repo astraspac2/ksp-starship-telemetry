@@ -95,3 +95,30 @@ def test_the_split_arrangement_replaces_flight_only_while_the_booster_is_read():
     assert layout_for(300.0, 143.0, 143.0, False) is Layout.FLIGHT
     assert layout_for(145.0, 143.0, 143.0, True) is Layout.STAGE_SEP  # the separation itself is unchanged
     assert layout_for(100.0, 143.0, None, True) is Layout.STAGE_1
+
+
+def test_when_the_booster_is_lost_a_record_of_its_last_moments_is_written(tmp_path):
+    ship, booster = FakeVessel(0.0), FakeVessel(100.0, speed=1269.0, altitude=26_100.0)
+    log = tmp_path / "booster-loss.csv"
+    tracker = BoosterTracker(log)
+    centre = centre_with(ship, booster)
+    separated(tracker, centre)
+    booster.fail = True
+    tracker.update(2.0, centre, False)
+    assert not log.exists()  # it is only written once the booster is really lost
+    tracker.update(2.0 + LOST_AFTER_SECONDS + 0.5, centre, False)
+    text = log.read_text(encoding="utf-8")
+    assert "1269.0,26100.0" in text  # the last good reading
+    assert "RuntimeError: gone" in text  # what the game said
+    assert "still in the game's vessel list: yes" in text  # and whether the game still has it
+
+
+def test_no_record_is_written_without_a_path_and_a_bad_path_does_not_stop_anything(tmp_path):
+    booster = FakeVessel(100.0)
+    for tracker in (BoosterTracker(), BoosterTracker(tmp_path / "missing-folder" / "x.csv")):
+        centre = centre_with(FakeVessel(0.0), booster)
+        separated(tracker, centre)
+        booster.fail = True
+        tracker.update(2.0, centre, False)
+        assert not tracker.update(10.0, centre, False).live
+        booster.fail = False

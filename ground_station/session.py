@@ -5,6 +5,7 @@ Qt-free so it can be unit-tested. The panel only calls this; the display windows
 
 import time
 from dataclasses import replace
+from pathlib import Path
 from typing import Callable
 
 from .auto_markers import LATE_MARKER_KINDS, LATE_MARKER_VISIBLE_FROM, AutoMarker, AutoMarkerTracker, NodeProposal, auto_markers_from_dicts, auto_markers_to_dicts
@@ -33,8 +34,10 @@ class Session:
         reader_factory: Callable[..., KrpcReader] = KrpcReader,
         game_time: Callable[[], float] = time.monotonic,
         trace: StagingTrace | None = None,
+        booster_log: Path | None = None,
     ):
         self.settings = settings
+        self._booster_log = booster_log  # where the reader writes a record when the booster is lost
         self.trace = trace  # a record of what the game reported around a staging, when wanted
         self._reader_factory = reader_factory
         self.mock_game = MockGame(now=game_time)  # the mock source's stand-in for KSP's game clock
@@ -108,7 +111,8 @@ class Session:
         if self._reader is not None:
             return
         s = self.settings
-        self._reader = self._reader_factory(s.address.strip(), s.rpc_port, s.stream_port)
+        extra = {} if self._booster_log is None else {"booster_log": self._booster_log}
+        self._reader = self._reader_factory(s.address.strip(), s.rpc_port, s.stream_port, **extra)
         self._reader.altitude_mode = s.altitude_mode
         self._reader.start()
 

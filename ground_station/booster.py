@@ -7,12 +7,15 @@ readings stop for a moment the booster is lost for good: nothing is guessed. Not
 """
 
 import math
+from collections import deque
 from dataclasses import dataclass
+from pathlib import Path
 
 FIND_SECONDS = 60.0  # after the separation the booster is looked for this long
 FIND_DISTANCE_M = 5000.0  # and must be this close to the ship to be taken for it
 READ_EVERY_SECONDS = 0.25
 LOST_AFTER_SECONDS = 3.0  # readings that fail this long mean the booster is gone
+LOG_SECONDS = 20.0  # what the last readings were, kept for the record written when the booster is lost
 
 
 @dataclass(frozen=True)
@@ -23,7 +26,8 @@ class BoosterReading:
 
 
 class BoosterTracker:
-    def __init__(self):
+    def __init__(self, log_path: Path | None = None):
+        self._log_path = log_path  # where to write a record of the booster's last moments when it is lost; None = none
         self.reset()
 
     def reset(self) -> None:
@@ -34,6 +38,8 @@ class BoosterTracker:
         self._reading = BoosterReading()
         self._last_read: float | None = None
         self._failing_since: float | None = None
+        self._last_error = ""
+        self._history: deque[tuple[float, float, float]] = deque()  # (time, speed, altitude) of the last good readings
 
     @property
     def reading(self) -> BoosterReading:
@@ -67,16 +73,44 @@ class BoosterTracker:
             )
             if not (math.isfinite(flight_speed) and math.isfinite(flight_altitude)):
                 raise ValueError("not a number")
-        except Exception:
+        except Exception as exc:
+            self._last_error = f"{type(exc).__name__}: {exc}"
             if self._failing_since is None:
                 self._failing_since = now
             if now - self._failing_since >= LOST_AFTER_SECONDS:  # gone: the game removed it
+                self._write_loss(centre, now)
                 self._lost, self._vessel = True, None
                 self._reading = BoosterReading()
             return self._reading
         self._failing_since = None
         self._reading = BoosterReading(flight_speed, flight_altitude, True)
+        self._history.append((round(now, 2), round(flight_speed, 1), round(flight_altitude, 1)))
+        while self._history and self._history[0][0] < now - LOG_SECONDS:
+            self._history.popleft()
         return self._reading
+
+    def _write_loss(self, centre, now: float) -> None:
+        """A small csv of the booster's last readings and what the game said when they stopped, for finding out why it went."""
+        if self._log_path is None:
+            return
+        listed = "unknown"
+        try:
+            listed = "yes" if self._vessel in centre.vessels else "no"
+        except Exception as exc:
+            listed = f"error {type(exc).__name__}"
+        situation = "unknown"
+        try:
+            situation = str(getattr(self._vessel.situation, "name", self._vessel.situation))
+        except Exception as exc:
+            situation = f"error {type(exc).__name__}"
+        lines = ["wall_s,speed_ms,altitude_m"] + [f"{t},{v},{a}" for t, v, a in self._history]
+        lines.append(f"# lost at wall_s {round(now, 2)}, the last good reading was {round(self._failing_since or now, 2)}")
+        lines.append(f"# the game said: {self._last_error}")
+        lines.append(f"# still in the game's vessel list: {listed}; its situation: {situation}")
+        try:
+            self._log_path.write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
+        except OSError:
+            pass  # a record is only a help: failing to write it must not stop the telemetry
 
     @staticmethod
     def _nearest(centre):

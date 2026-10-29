@@ -10,6 +10,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, replace
 from enum import Enum
+from pathlib import Path
 from typing import Callable
 
 from . import sep_cluster
@@ -388,6 +389,7 @@ class KrpcReader:
         clock: Callable[[], float] = time.monotonic,
         poll_interval: float = 0.05,
         retry_seconds: float = RETRY_SECONDS,
+        booster_log: Path | None = None,
     ):
         self._address, self._rpc_port, self._stream_port = address, rpc_port, stream_port
         self._connect_fn = connect_fn or self._default_connect
@@ -403,7 +405,7 @@ class KrpcReader:
         self._server_version: str | None = None
         self.altitude_mode = "surface"  # "surface" (above ground/sea) or "sea" (above sea level); may change while running
         self._rated_memory: dict[str, float] = {}
-        self._booster = BoosterTracker()
+        self._booster = BoosterTracker(booster_log)
 
     def _default_connect(self):
         import krpc
