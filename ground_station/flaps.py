@@ -28,6 +28,7 @@ FOLD_LIMITS = (-90.0, 90.0)
 # which way the stick moves a flap (+1 = toward deployed): pitch works the forward and aft flaps against each other, roll the left and right
 PITCH_SIGN_FORWARD = 1.0
 ROLL_SIGN_LEFT = -1.0  # (turned round after a test in the game)
+FORWARD_FOLD_SCALE = 0.6  # the forward flaps already lean back, so the same fold takes them too far in: they swing this share of it
 YAW_SIGN = 1.0  # yaw works the diagonal pairs against each other: forward-left with aft-right
 
 
@@ -56,6 +57,8 @@ def fold_degrees(fields: dict, forward: bool, left: bool, pitch: float, yaw: flo
         stick += yaw * YAW_SIGN * (1.0 if forward else -1.0) * (1.0 if left else -1.0)
     stick = max(-1.0, min(1.0, stick)) if retracted else 0.0  # the stick moves a flap only while Deploy is True (recorded: the real flaps follow it then, and sit still with Deploy False)
     fold = (deploy_angle if retracted else 0.0) - limiter * stick
+    if forward:
+        fold *= FORWARD_FOLD_SCALE
     return max(FOLD_LIMITS[0], min(FOLD_LIMITS[1], fold))
 
 

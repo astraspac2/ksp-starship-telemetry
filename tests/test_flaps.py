@@ -10,7 +10,7 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from ground_station.bar import FLAP_STEP, TelemetryBar
-from ground_station.flaps import FLAPS, MODULE_NAME, FlapTracker, fold_degrees
+from ground_station.flaps import FLAPS, FORWARD_FOLD_SCALE, MODULE_NAME, FlapTracker, fold_degrees
 from ground_station.render3d import ModelRenderer
 from ground_station.starship_model import starship_stack
 from ground_station.telemetry import mock_telemetry
@@ -28,14 +28,15 @@ def qapp():
 def test_flaps_out_are_the_pose_the_model_is_drawn_in_and_retracting_folds_each_by_the_deploy_angle():
     for forward in (True, False):
         assert fold_degrees(OUT, forward, True, 0, 0, 0) == 0.0
-        assert fold_degrees(RETRACTED, forward, True, 0, 0, 0) == 50.0
+    assert fold_degrees(RETRACTED, False, True, 0, 0, 0) == 50.0
+    assert fold_degrees(RETRACTED, True, True, 0, 0, 0) == 50.0 * FORWARD_FOLD_SCALE == 30.0  # the forward flaps swing less far
 
 
 def test_the_stick_moves_only_the_flaps_that_answer_that_axis():
-    assert fold_degrees(RETRACTED, True, True, 1.0, 0, 0) == 50.0  # pitch is off for this flap: the stick does nothing
+    assert fold_degrees(RETRACTED, True, True, 1.0, 0, 0) == 30.0  # pitch is off for this flap: the stick does nothing
     pitching = {**RETRACTED, "Pitch": "False"}  # False = the flap answers pitch
     forward, aft = fold_degrees(pitching, True, True, 1.0, 0, 0), fold_degrees(pitching, False, True, 1.0, 0, 0)
-    assert (forward, aft) == (10.0, 90.0)  # forward and aft go against each other; full stick is the authority limiter (40)
+    assert (forward, aft) == (6.0, 90.0)  # forward and aft go against each other; full stick is the authority limiter (40)
     rolling = {**RETRACTED, "Roll": "False"}
     assert fold_degrees(rolling, True, True, 0, 0, 1.0) != fold_degrees(rolling, True, False, 0, 0, 1.0)  # left and right go against each other
 
@@ -67,7 +68,7 @@ def conn_with(vessel):
 
 def test_the_four_flaps_are_read_in_order():
     tracker = FlapTracker()
-    assert tracker.update(0.0, conn_with(FakeVessel(RETRACTED))) == (50.0,) * 4
+    assert tracker.update(0.0, conn_with(FakeVessel(RETRACTED))) == (30.0, 30.0, 50.0, 50.0)
     assert len(FLAPS) == 4
 
 
@@ -86,7 +87,7 @@ def test_readings_are_not_asked_for_more_than_a_few_times_a_second():
     vessel.parts = SimpleNamespace(with_name=lambda name: [FakePart(name, dict(RETRACTED))])
     assert tracker.update(0.05, conn_with(vessel)) == (0.0,) * 4  # too soon: the old reading
     tracker.reset()
-    assert tracker.update(0.3, conn_with(vessel)) == (50.0,) * 4
+    assert tracker.update(0.3, conn_with(vessel)) == (30.0, 30.0, 50.0, 50.0)
 
 
 def test_a_game_that_stops_answering_gives_nothing_instead_of_old_flaps():
@@ -227,8 +228,9 @@ def test_yaw_works_the_diagonal_pairs_against_each_other_and_only_where_the_flap
     active = {**RETRACTED, "Yaw": "False"}
     fwd_left, fwd_right = fold_degrees(active, True, True, 0, 1.0, 0), fold_degrees(active, True, False, 0, 1.0, 0)
     aft_left, aft_right = fold_degrees(active, False, True, 0, 1.0, 0), fold_degrees(active, False, False, 0, 1.0, 0)
-    assert fwd_left == aft_right and fwd_right == aft_left and fwd_left != fwd_right  # forward-left with aft-right
-    assert fold_degrees(RETRACTED, True, True, 0, 1.0, 0) == 50.0  # yaw is off for this flap: the stick does nothing
+    assert fwd_left / FORWARD_FOLD_SCALE - 50.0 == aft_right - 50.0 and fwd_right / FORWARD_FOLD_SCALE - 50.0 == aft_left - 50.0  # forward-left with aft-right
+    assert fwd_left != fwd_right
+    assert fold_degrees(RETRACTED, True, True, 0, 1.0, 0) == 30.0  # yaw is off for this flap: the stick does nothing
 
 
 def test_a_flap_with_deploy_false_does_not_follow_the_stick():
