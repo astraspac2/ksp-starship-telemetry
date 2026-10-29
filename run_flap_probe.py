@@ -16,7 +16,7 @@ import time
 
 from ground_station.flap_probe import COLUMNS, read_flaps
 
-WATCHED = ("deployed", "authority_limiter", "pitch_enabled", "yaw_enabled", "roll_enabled", "inverted", "direction", "fields")
+WATCHED = ("modules", "deployed", "deploy_angle", "authority_limiter", "direction", "fields")
 
 
 def main() -> int:

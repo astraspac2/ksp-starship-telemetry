@@ -1,43 +1,53 @@
-"""A read-only look at the flown vessel's flaps (control surfaces), for finding out what the game really reports about them.
+"""A read-only look at the flown vessel's flaps, for finding out what the game really reports about them.
 
-For every control surface it writes the deployed state, authority limiter, which axes it answers, and every field the part's
-modules expose (the Deploy Angle is likely one), plus the pilot's pitch/yaw/roll input and the part's direction. Nothing here
-sends anything to the game. Qt-free so it can be unit-tested.
+kRPC's own list of control surfaces misses some flap parts (the Starship Expansion Project may use its own module), so this
+scans every part and takes the ones that look like a flap or fin: a title with "flap" or "fin" in it, or any module with a
+Deploy Angle or Authority Limiter field. For each it writes the names of all its modules and every field they expose, plus
+the pilot's pitch/yaw/roll input and the part's direction. Nothing here sends anything to the game. Qt-free so it can be
+unit-tested.
 """
 
 from .vessel_probe import UNREADABLE, _value
 
 COLUMNS = (
-    "wall_s", "flap", "title", "deployed", "authority_limiter", "pitch_enabled", "yaw_enabled", "roll_enabled",
-    "inverted", "surface_area", "direction", "fields", "input_pitch", "input_yaw", "input_roll", "errors",
+    "wall_s", "flap", "title", "modules", "kind", "deployed", "deploy_angle", "authority_limiter", "direction", "fields",
+    "input_pitch", "input_yaw", "input_roll", "errors",
 )
-FIELD_HINTS = ("deploy", "angle", "authority", "flap", "surface", "ctrl", "control")
+TITLE_HINTS = ("flap", "fin")
+FIELD_HINTS = ("deploy angle", "authority")
 
 
-def _fields(part) -> str:
-    """Every module field that looks like it could be a flap's angle or state, as module.name:field=value."""
+def _module_fields(part) -> dict[str, dict]:
+    """Every module's fields, by module name; a module that will not list its fields gives an ERR entry."""
+    found = {}
+    for module in part.modules:
+        try:
+            found[module.name] = dict(module.fields)
+        except Exception as exc:
+            found[module.name] = {"fields": f"{UNREADABLE} {type(exc).__name__}"}
+    return found
 
-    def read():
-        found = []
-        for module in part.modules:
-            try:
-                fields = dict(module.fields)
-            except Exception as exc:
-                found.append(f"{module.name}:{UNREADABLE} {type(exc).__name__}")
-                continue
-            for key, value in fields.items():
-                if any(hint in key.lower() or hint in module.name.lower() for hint in FIELD_HINTS):
-                    found.append(f"{module.name}:{key}={value}")
-        return ";".join(found)
 
-    return str(_value(read))
+def _is_flap(part, modules: dict[str, dict]) -> bool:
+    title = str(_value(lambda: part.title)).lower()
+    if any(hint in title for hint in TITLE_HINTS):
+        return True
+    return any(any(hint in key.lower() for hint in FIELD_HINTS) for fields in modules.values() for key in fields)
+
+
+def _find(modules: dict[str, dict], *names: str):
+    for fields in modules.values():
+        for key, value in fields.items():
+            if key.lower() in names:
+                return value
+    return ""
 
 
 def read_flaps(vessel, wall: float) -> list[dict]:
-    """One row per control surface on `vessel`; what the game will not say comes back as ERR plus the kind of error."""
-    surfaces = _value(lambda: list(vessel.parts.control_surfaces))
-    if isinstance(surfaces, str):
-        return [{"wall_s": round(wall, 2), "flap": surfaces, "errors": f"control_surfaces={surfaces}"}]
+    """One row per flap-like part on `vessel`; what the game will not say comes back as ERR plus the kind of error."""
+    parts = _value(lambda: list(vessel.parts.all))
+    if isinstance(parts, str):
+        return [{"wall_s": round(wall, 2), "flap": parts, "errors": f"parts={parts}"}]
     control = vessel.control
     inputs = {
         "input_pitch": _value(lambda: round(control.pitch, 3)),
@@ -45,22 +55,24 @@ def read_flaps(vessel, wall: float) -> list[dict]:
         "input_roll": _value(lambda: round(control.roll, 3)),
     }
     rows = []
-    for index, surface in enumerate(surfaces):
-        part = surface.part
+    for index, part in enumerate(parts):
+        modules = _value(lambda: _module_fields(part))
+        if isinstance(modules, str):
+            continue
+        if not _is_flap(part, modules):
+            continue
         row = {"wall_s": round(wall, 2), **inputs}
         row["flap"] = _value(lambda: f"{index}:{part.name}")
         row["title"] = _value(lambda: part.title)
-        row["deployed"] = _value(lambda: surface.deployed)
-        row["authority_limiter"] = _value(lambda: round(surface.authority_limiter, 2))
-        row["pitch_enabled"] = _value(lambda: surface.pitch_enabled)
-        row["yaw_enabled"] = _value(lambda: surface.yaw_enabled)
-        row["roll_enabled"] = _value(lambda: surface.roll_enabled)
-        row["inverted"] = _value(lambda: surface.inverted)
-        row["surface_area"] = _value(lambda: round(surface.surface_area, 2))
+        row["modules"] = ";".join(modules)
+        row["kind"] = "control-surface" if "ModuleControlSurface" in modules else "other"
+        row["deployed"] = _find(modules, "deploy")
+        row["deploy_angle"] = _find(modules, "deploy angle")
+        row["authority_limiter"] = _find(modules, "authority limiter")
         row["direction"] = _value(lambda: tuple(round(x, 3) for x in part.direction(vessel.reference_frame)))
-        row["fields"] = _fields(part)
+        row["fields"] = ";".join(f"{name}:{key}={value}" for name, fields in modules.items() for key, value in fields.items())
         row["errors"] = ";".join(
             f"{key}={value}" for key, value in row.items() if isinstance(value, str) and value.startswith(UNREADABLE)
-        )
+        ) or (f"fields={UNREADABLE}" if f"{UNREADABLE} " in row["fields"] else "")
         rows.append(row)
     return rows

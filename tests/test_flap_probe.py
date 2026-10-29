@@ -3,32 +3,38 @@ from types import SimpleNamespace
 from ground_station.flap_probe import read_flaps
 
 
-def make_flap(name="BL3Flap", deployed=True, limiter=40.0, modules=None):
-    module = SimpleNamespace(name="ModuleControlSurface", fields={"Deploy Angle": "50", "Authority Limiter": "40", "Other": "x"})
-    part = SimpleNamespace(name=name, title="Donnager BL-3 Rear Right Flap", modules=modules if modules is not None else [module],
-                           direction=lambda frame: (0.0, 1.0, 0.0))
-    return SimpleNamespace(part=part, deployed=deployed, authority_limiter=limiter, pitch_enabled=True, yaw_enabled=True,
-                           roll_enabled=False, inverted=False, surface_area=3.0)
+def make_part(name="BL3Flap", title="Donnager BL-3 Rear Right Flap", modules=None):
+    if modules is None:
+        modules = [SimpleNamespace(name="ModuleControlSurface", fields={"Deploy": "Retracted", "Deploy Angle": "50", "Authority Limiter": "40"})]
+    return SimpleNamespace(name=name, title=title, modules=modules, direction=lambda frame: (0.0, 1.0, 0.0))
 
 
-def make_vessel(surfaces):
-    return SimpleNamespace(parts=SimpleNamespace(control_surfaces=surfaces), control=SimpleNamespace(pitch=0.5, yaw=0.0, roll=-0.25),
-                           reference_frame="frame")
+def make_vessel(parts):
+    return SimpleNamespace(parts=SimpleNamespace(all=parts), control=SimpleNamespace(pitch=0.5, yaw=0.0, roll=-0.25), reference_frame="frame")
 
 
-def test_each_flap_gives_a_row_with_its_state_fields_and_the_pilots_input():
-    rows = read_flaps(make_vessel([make_flap(), make_flap("Other", deployed=False)]), 3.0)
-    assert len(rows) == 2 and rows[0]["errors"] == ""
-    assert (rows[0]["deployed"], rows[1]["deployed"], rows[0]["authority_limiter"]) == (True, False, 40.0)
+def test_a_flap_gives_a_row_with_its_modules_fields_and_the_pilots_input():
+    rows = read_flaps(make_vessel([make_part()]), 3.0)
+    assert len(rows) == 1 and rows[0]["errors"] == ""
+    assert (rows[0]["deploy_angle"], rows[0]["authority_limiter"], rows[0]["deployed"]) == ("50", "40", "Retracted")
+    assert rows[0]["modules"] == "ModuleControlSurface" and rows[0]["kind"] == "control-surface"
     assert rows[0]["input_pitch"] == 0.5 and rows[0]["input_roll"] == -0.25
-    assert "ModuleControlSurface:Deploy Angle=50" in rows[0]["fields"]
-    assert "ModuleControlSurface:Other=x" in rows[0]["fields"]  # every field of a control-surface module is logged
 
 
-def test_fields_of_unrelated_modules_are_left_out():
-    unrelated = SimpleNamespace(name="ModuleLight", fields={"Colour": "red"})
-    row = read_flaps(make_vessel([make_flap(modules=[unrelated])]), 1.0)[0]
-    assert row["fields"] == ""
+def test_a_flap_on_a_module_kRPC_does_not_know_is_still_found_by_its_title():
+    custom = SimpleNamespace(name="ModuleSEPFlap", fields={"Angle": "12"})
+    rows = read_flaps(make_vessel([make_part(title="Starship Flap", modules=[custom])]), 1.0)
+    assert len(rows) == 1 and rows[0]["kind"] == "other" and "ModuleSEPFlap:Angle=12" in rows[0]["fields"]
+
+
+def test_a_part_with_a_deploy_angle_field_is_found_whatever_its_title():
+    odd = SimpleNamespace(name="ModuleX", fields={"Deploy Angle": "30"})
+    assert len(read_flaps(make_vessel([make_part(title="Widget", modules=[odd])]), 1.0)) == 1
+
+
+def test_ordinary_parts_are_left_out():
+    tank = make_part(title="Fuel tank", modules=[SimpleNamespace(name="ModuleLight", fields={"Colour": "red"})])
+    assert read_flaps(make_vessel([tank]), 1.0) == []
 
 
 def test_a_module_that_will_not_list_its_fields_is_reported_not_fatal():
@@ -39,11 +45,11 @@ def test_a_module_that_will_not_list_its_fields_is_reported_not_fatal():
         def fields(self):
             raise RuntimeError("no")
 
-    row = read_flaps(make_vessel([make_flap(modules=[Broken()])]), 1.0)[0]
-    assert "ERR RuntimeError" in row["fields"] and row["deployed"] is True
+    row = read_flaps(make_vessel([make_part(modules=[Broken()])]), 1.0)[0]
+    assert "ERR RuntimeError" in row["fields"] and row["errors"] != ""
 
 
-def test_a_vessel_that_will_not_list_its_control_surfaces_gives_one_error_row():
+def test_a_vessel_that_will_not_list_its_parts_gives_one_error_row():
     class Unloaded:
         control = SimpleNamespace()
 
@@ -52,4 +58,4 @@ def test_a_vessel_that_will_not_list_its_control_surfaces_gives_one_error_row():
             raise RuntimeError("not loaded")
 
     rows = read_flaps(Unloaded(), 1.0)
-    assert len(rows) == 1 and "control_surfaces=ERR RuntimeError" in rows[0]["errors"]
+    assert len(rows) == 1 and "parts=ERR RuntimeError" in rows[0]["errors"]
