@@ -178,6 +178,20 @@ def _engine_dot_scale(total: int, index: int) -> float:
     return 1.0
 
 
+def _dot_wave(total: int, index: int) -> tuple[float, float]:
+    """When engine `index` swells in as a cluster arrives (0..1): from the centre outwards, ring by ring, as on the overlay."""
+    if total == 6:
+        return (0.1, 0.5) if index < 3 else (0.45, 0.95)
+    counts = [1] if total == 1 else [3, 10, 20] if total == 33 else _ring_counts(total)
+    ring, before = 0, 0
+    for ring, count in enumerate(counts):
+        if index < before + count:
+            break
+        before += count
+    share = 0.0 if len(counts) == 1 else ring / (len(counts) - 1)
+    return 0.1 + 0.45 * share, 0.5 + 0.45 * share
+
+
 def _engine_positions(total: int) -> list[tuple[float, float]]:
     """Concentric rings of engine positions inside a unit circle."""
     if total <= 0:
@@ -251,6 +265,7 @@ def draw_engine_cluster(
     inner_ring.setAlpha(70)
     painter.setPen(QPen(inner_ring, 1.0))
     painter.setBrush(Qt.NoBrush)
+    painter.setOpacity(base * dots_alpha * min(grow / 0.15, 1.0))  # the thin circle is the first thing there
     painter.drawEllipse(center, radius * 0.86, radius * 0.86)  # the thin circle round the engine dots
     positions = _engine_positions(engines_total)
     inner = radius * 0.74
@@ -262,7 +277,9 @@ def draw_engine_cluster(
             painter.setBrush(_mix(theme.dim, theme.text, levels[i]))
         else:
             painter.setBrush(theme.text if on else theme.dim)
-        size = dot * _engine_dot_scale(engines_total, i) * grow
+        start, end = _dot_wave(engines_total, i)
+        swell = 1.0 if grow >= 1.0 else min(max((grow - start) / (end - start), 0.0), 1.0)  # each ring swells in its turn
+        size = dot * _engine_dot_scale(engines_total, i) * swell
         painter.drawEllipse(QPointF(center.x() + ux * inner, center.y() + uy * inner), size, size)
     painter.setOpacity(base)
 
