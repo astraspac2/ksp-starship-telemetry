@@ -25,8 +25,8 @@ SHIP_LENGTH = 0.40  # a little over a third of the stack, so the booster is the 
 SPLIT_Y = 0.5 - SHIP_LENGTH  # where the ship's bottom meets the booster, in model height
 BODY_RADIUS = 0.034  # the ship is about 5.9 diameters long, as measured on the picture of it
 DIAMETER = 2 * BODY_RADIUS
-NOSE_SHARE = 0.14  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
-NOSE_BLACK_SHARE = 1.0  # of the nose is black tile all the way round, even on the steel side
+NOSE_SHARE = 0.27  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
+NOSE_BLACK_SHARE = 0.54  # the black cap is this share of the nose tall: about a body width down from the tip, as in the picture  # of the nose is black tile all the way round, even on the steel side
 HOT_STAGE_HEIGHT = 0.022
 SKIRT_TOP = -0.47  # the engine skirt runs from here down to the bells at -0.5
 SEGMENTS = 24  # round the axis: enough that the silhouette is smooth at the dial's size
@@ -100,10 +100,9 @@ def _body_radius(height: float) -> float:
 
 
 def _tile_reach(height: float) -> float:
-    """How far round from the heat shield's centre line the black tiles reach at this height: about half way on the barrel, and all the
-    way round over the whole nose, which ends in a clean ring (the picture of the nose)."""
-    barrel_top = 0.5 - NOSE_SHARE * SHIP_LENGTH
-    return np.pi if height > barrel_top - 1e-9 else TILE_HALF_ANGLE
+    """How far round from the heat shield's centre line the black tiles reach at this height: about half way on the barrel and the lower
+    nose, and all the way round the cap at the tip, which ends in a clean ring."""
+    return np.pi if height > 0.5 - NOSE_SHARE * SHIP_LENGTH * NOSE_BLACK_SHARE - 1e-9 else TILE_HALF_ANGLE
 
 
 def _engine_layout() -> list[tuple[float, float]]:
@@ -245,19 +244,24 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
 
     belts = [(ship_height(a), ship_height(b)) for a, b in SHIP_BELTS]  # (top, bottom) heights
     ship_rings: list[tuple[float, float]] = [(0.5, 0.0)]
-    dome_steps = [DOME_SHARE * (step / 12) ** 1.12 for step in range(1, 13)]  # a few more rings near the tip, where it curves most; plenty lower down so the shield's edge is smooth
-    for s in dome_steps + ([] if DOME_SHARE >= 1.0 else [DOME_SHARE + (1.0 - DOME_SHARE) * 0.5, 1.0]):
-        ship_rings.append((0.5 - NOSE_SHARE * SHIP_LENGTH * s, _nose_radius(s)))
+    nose_steps = sorted({step / 18 for step in range(1, 19)} | {NOSE_BLACK_SHARE})  # rings down the nose, one exactly where the black cap ends
+    nose_height = lambda s: 0.5 - NOSE_SHARE * SHIP_LENGTH * s  # noqa: E731
+    cap_bottom = nose_height(NOSE_BLACK_SHARE)
+    collar = (cap_bottom, cap_bottom - COLLAR_HEIGHT)  # the dark raised band where the black cap ends
+    for s in nose_steps:
+        if s <= NOSE_BLACK_SHARE + 1e-9:
+            ship_rings.append((nose_height(s), _nose_radius(s)))
+    ship_rings.append((collar[0] - 1e-4, _body_radius(collar[0]) * COLLAR_BULGE))
+    ship_rings.append((collar[1], _body_radius(collar[1]) * COLLAR_BULGE))
+    ship_rings.append((collar[1] - 1e-4, _body_radius(collar[1])))
+    for s in nose_steps:
+        if nose_height(s) < collar[1] - 1e-3:
+            ship_rings.append((nose_height(s), _nose_radius(s)))
     edges = {SPLIT_Y}
     for top, bottom in belts:
         edges.update((top, bottom))
     bands = 7
     edges.update(barrel_top + (SPLIT_Y - barrel_top) * i / bands for i in range(1, bands))
-    collar = (barrel_top, barrel_top - COLLAR_HEIGHT)  # the dark raised band round the foot of the nose
-    ship_rings.append((barrel_top, BODY_RADIUS * 1.0))
-    ship_rings.append((barrel_top - 1e-4, BODY_RADIUS * COLLAR_BULGE))
-    ship_rings.append((collar[1], BODY_RADIUS * COLLAR_BULGE))
-    ship_rings.append((collar[1] - 1e-4, BODY_RADIUS))
     for height in sorted((h for h in edges if h < collar[1] - 1e-3), reverse=True):
         ship_rings.append((height, BODY_RADIUS))
 
