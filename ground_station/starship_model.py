@@ -23,9 +23,10 @@ from .mesh import Mesh
 
 SHIP_LENGTH = 0.44
 SPLIT_Y = 0.5 - SHIP_LENGTH  # where the ship's bottom meets the booster, in model height
-BODY_RADIUS = 0.043  # about 1.15 times the real thing's share of its length, so it still reads on a small dial
+BODY_RADIUS = 0.040  # the ship is 5.5 diameters long, a little fatter than the real 5.6 so it still reads on a small dial
 DIAMETER = 2 * BODY_RADIUS
-NOSE_SHARE = 0.25  # of the ship's length
+NOSE_SHARE = 0.16  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
+NOSE_BLACK_SHARE = 0.70  # of the nose is black tile all the way round, even on the steel side
 HOT_STAGE_HEIGHT = 0.022
 SKIRT_TOP = -0.47  # the engine skirt runs from here down to the bells at -0.5
 SEGMENTS = 28  # round the axis: enough that the silhouette is smooth at the dial's size
@@ -60,14 +61,21 @@ AFT_FLAP_LEAN = 0.0  # the aft flaps stick out straight to each side, neither to
 FORWARD_FLAP_THICKNESS = 0.012
 AFT_FLAP_THICKNESS = 0.016
 
-SHIP_BELTS: tuple[tuple[float, float], ...] = ()  # (from, to) as fractions of the ship's length from its tip; none: too fine for the dial
+SHIP_BELTS = ((0.328, 0.338), (0.581, 0.589), (0.865, 0.873))  # (from, to) as fractions of the ship's length from its tip, measured on the picture
+SHIP_BELT = np.array([0.38, 0.39, 0.43])  # the dark seams round the ship
+RACEWAY = np.array([0.82, 0.83, 0.86])  # the two pipes running down the ship's steel side
+RACEWAY_OFFSET = np.radians(19.3)  # how far either side of the steel side's centre line they run
+RACEWAY_FROM, RACEWAY_TO = 0.35, 0.95  # as fractions of the ship's length from its tip
+WINDOWS_FROM, WINDOWS_TO = 0.200, 0.235  # the band with the two dark hatches and the logo between them, as fractions from the tip
+HATCH_OFFSET = np.radians(32)  # how far either side of the steel side's centre line a hatch sits
+HATCH = np.array([0.13, 0.13, 0.16])
 BOOSTER_BELT = (0.345, 0.375)  # as fractions of the booster's length from its top
-BELL_RADIUS = 0.0039  # one engine bell on the booster's bottom
+BELL_RADIUS = 0.0036  # one engine bell on the booster's bottom
 
 
 def _nose_radius(s: float) -> float:
     """Ogive nose: radius at fraction s (0 at the tip, 1 where the nose meets the barrel). Fits the pictures' outline."""
-    return BODY_RADIUS * (1.0 - (1.0 - s) ** 1.8) ** 0.85
+    return BODY_RADIUS * (1.0 - (1.0 - s) ** 1.4)
 
 
 def _body_radius(height: float) -> float:
@@ -216,7 +224,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
     for step in range(1, 13):
         s = step / 12
         ship_rings.append((0.5 - NOSE_SHARE * SHIP_LENGTH * s, _nose_radius(s)))
-    edges = {SPLIT_Y}
+    edges = {SPLIT_Y, ship_height(WINDOWS_FROM), ship_height(WINDOWS_TO)}
     for top, bottom in belts:
         edges.update((top, bottom))
     bands = 7
@@ -224,12 +232,25 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
     for height in sorted((h for h in edges if h < barrel_top - 1e-9), reverse=True):
         ship_rings.append((height, BODY_RADIUS))
 
+    nose_black_bottom = 0.5 - NOSE_SHARE * SHIP_LENGTH * NOSE_BLACK_SHARE
+    steel_centre = TILE_CENTRE + np.pi
+
     def ship_colour(upper: float, lower: float, k: int, band: int) -> tuple[np.ndarray, float]:
         middle = (upper + lower) / 2
+        if middle > nose_black_bottom:  # the tip of the nose is black tile all the way round
+            return TILE * (1.0 + 0.10 * (((k + band % 2) % 2) - 0.5)), GLOSS_TILE
         if any(bottom <= middle <= top for top, bottom in belts):
-            return BELT, GLOSS_STEEL
+            return SHIP_BELT, GLOSS_STEEL
+        side = abs((2 * np.pi * (k + 0.5) / segments - steel_centre + np.pi) % (2 * np.pi) - np.pi)  # how far round from the steel side's centre line
+        if abs(side - RACEWAY_OFFSET) < np.radians(3) and ship_height(RACEWAY_TO) <= middle <= ship_height(RACEWAY_FROM):
+            return RACEWAY, 0.5
+        if ship_height(WINDOWS_TO) <= middle <= ship_height(WINDOWS_FROM):
+            if abs(side - HATCH_OFFSET) < np.radians(3):  # the two dark hatches
+                return HATCH, 0.3
+            if side < np.radians(8):  # and the logo between them
+                return HATCH * 1.8, 0.2
         # stainless panels: alternate bands a touch light and dark, and a faint seam every few segments
-        return SHIP_STEEL * (0.985 if band % 2 else 1.015) * (0.985 if k % 7 == 0 else 1.0), GLOSS_STEEL
+        return SHIP_STEEL * (1.0 + 0.012 * ((k + band) % 2 - 0.5) * 2 + (0.012 if band % 2 else -0.012)) * (0.985 if k % 7 == 0 else 1.0), GLOSS_STEEL
 
     ship_first = tube(ship_rings, ship_colour, tiles=True)
     cap(SPLIT_Y + 0.001, ship_first + (len(ship_rings) - 1) * segments, ENGINES)  # the ship's bottom, so it is not hollow once it is free
@@ -273,17 +294,17 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         grid_fin(TILE_CENTRE + turn, ring_bottom - 0.040)
 
     # forward flaps (swept, just below the nose) and aft flaps (big, near the bottom of the ship)
-    forward = [  # swept: the leading edge slants out and back from the nose, the tip is a sharp corner
-        (0.0, ship_height(0.115)),
-        (0.40 * DIAMETER, ship_height(0.185)),
-        (0.40 * DIAMETER, ship_height(0.228)),
-        (0.0, ship_height(0.228)),
+    forward = [  # measured on the picture: swept, the leading edge slants out and down from near the tip
+        (0.0, ship_height(0.076)),
+        (0.31 * DIAMETER, ship_height(0.142)),
+        (0.31 * DIAMETER, ship_height(0.190)),
+        (0.0, ship_height(0.195)),
     ]
-    aft = [  # a big wing: the top edge slants out and down, a straight outer edge and a flat bottom
-        (0.0, ship_height(0.80)),
-        (0.44 * DIAMETER, ship_height(0.875)),
-        (0.44 * DIAMETER, ship_height(0.985)),
-        (0.0, ship_height(0.985)),
+    aft = [  # a big wing: the top edge slants out and down, a straight outer edge, a nearly flat bottom
+        (0.0, ship_height(0.770)),
+        (0.46 * DIAMETER, ship_height(0.830)),
+        (0.46 * DIAMETER, ship_height(0.964)),
+        (0.0, ship_height(0.977)),
     ]
     # seen from above (the nose pointing at you, the heat shield below): the forward flaps lean back toward the steel
     # side, the aft flaps stick out straight to each side

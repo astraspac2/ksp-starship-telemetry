@@ -229,7 +229,7 @@ def test_the_ship_flaps_are_joined_to_the_body_not_floating():
     from ground_station.starship_model import NOSE_SHARE, SHIP_LENGTH, _body_radius, starship_stack
 
     mesh = starship_stack()
-    top = 0.5 - 0.115 * SHIP_LENGTH  # where the forward flaps' roots start, on the narrowing nose
+    top = 0.5 - 0.076 * SHIP_LENGTH  # where the forward flaps' roots start, on the narrowing nose
     assert top > 0.5 - NOSE_SHARE * SHIP_LENGTH
     roots = mesh.vertices[np.isclose(mesh.vertices[:, 1], top, atol=1e-6)]
     assert len(roots) == 4  # two flaps, two faces each
