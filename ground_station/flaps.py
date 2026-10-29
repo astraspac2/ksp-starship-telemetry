@@ -1,12 +1,13 @@
 """Follow the ship's four flaps in the game, so the dial's ship can fold and swing them the same way. Qt-free.
 
 The Starship Expansion Project flaps carry a `ModuleSEPControlSurface` with these fields (recorded with run_flap_probe.py):
-Deploy (True once deployed), Deploy Angle and Authority Limiter (both degrees), and Pitch, Yaw and Roll (whether the flap
-answers that axis). The game does not report the angle a flap is at this moment, so it is worked out: a deployed flap sits at
-its Deploy Angle, plus the stick input times the authority limiter on the axes it answers. Nothing here sends anything to the game.
+Deploy, Deploy Angle and Authority Limiter (both degrees), and Pitch, Yaw and Roll (whether the flap answers that axis). Deploy
+reads True while the flaps are RETRACTED (tucked toward the steel side, a little ahead of lift-off) and False on the pad with the
+flaps out, as pictured. The game does not report the angle a flap is at this moment, so it is worked out from those fields and the
+stick input times the authority limiter on the axes the flap answers. Nothing here sends anything to the game.
 
-Folds are in degrees, in the order of FLAPS: how far a flap is swung round the hull, away from the heat shield, from the pose the model
-is drawn in. Retracted (as in the user's pictures of the ship on the pad and climbing) the flaps stick straight out sideways: RETRACTED_FOLD. Deploying swings each flap by the deploy angle toward the belly (a smaller fold).
+Folds are in degrees, in the order of FLAPS: how far a flap is swung round the hull, away from the heat shield, from the pose the
+model is drawn in, which is the flaps straight out sideways (fold 0). A retracted flap is folded by the deploy angle.
 """
 
 MODULE_NAME = "ModuleSEPControlSurface"
@@ -21,7 +22,6 @@ FLAP_COUNT = len(FLAPS)
 READ_EVERY_SECONDS = 0.2
 RESCAN_EVERY_SECONDS = 3.0  # looking for the flaps again when they were not found or stopped answering
 FOLD_LIMITS = (-90.0, 90.0)
-RETRACTED_FOLD = 0.0  # where a retracted flap rests: straight out sideways, the pose the model is drawn in (as on the pad and climbing)
 # which way the stick moves a flap (+1 = toward deployed): pitch works the forward and aft flaps against each other, roll the left and right
 PITCH_SIGN_FORWARD = 1.0
 ROLL_SIGN_LEFT = 1.0
@@ -42,15 +42,15 @@ def fold_degrees(fields: dict, forward: bool, left: bool, pitch: float, yaw: flo
     """How far one flap is swung from the pose the model is drawn in, from its module's fields and the stick input (-1..1 each)."""
     deploy_angle = _number(fields.get("Deploy Angle"), 0.0)
     limiter = _number(fields.get("Authority Limiter"), 0.0)
-    deployed = _flag(fields.get("Deploy"))
+    retracted = _flag(fields.get("Deploy"))  # the field is True while the flaps are RETRACTED: on the pad, flaps out, it reads False
     stick = 0.0
     if _flag(fields.get("Pitch")):
         stick += pitch * PITCH_SIGN_FORWARD * (1.0 if forward else -1.0)
     if _flag(fields.get("Roll")):
         stick += roll * ROLL_SIGN_LEFT * (1.0 if left else -1.0)
     stick = max(-1.0, min(1.0, stick))  # yaw is not drawn: how the ship's flaps answer it is not known
-    current = (deploy_angle if deployed else 0.0) + limiter * stick
-    return max(FOLD_LIMITS[0], min(FOLD_LIMITS[1], RETRACTED_FOLD - current))
+    fold = (deploy_angle if retracted else 0.0) - limiter * stick
+    return max(FOLD_LIMITS[0], min(FOLD_LIMITS[1], fold))
 
 
 class FlapTracker:
