@@ -82,7 +82,8 @@ FIN_OUT, FIN_HALF, FIN_THICKNESS, FIN_WINDOWS = 0.36, 0.17, 0.009, 3  # a grid f
 BOOSTER_BELT = (0.365, 0.395)  # as fractions of the booster's length from its top
 TRUSS_STRUTS = 24
 SURFACE_LIFT = 0.012  # the pipe and chines are drawn after the barrel faces round them; far less than the barrel's width, so not over its far side
-CHINE_ANGLE, CHINE_HALF, CHINE_HEIGHT, CHINE_RAISE = np.radians(30), np.radians(13), 0.42, 0.0045  # the chines: raised strips either side of the raceway, low on the booster
+CHINES = ((np.radians(30), np.radians(13)), (np.radians(180 - 75), np.radians(5)))  # (angle from the raceway, half width): big ones either side of it, small ones on the far side
+CHINE_HEIGHT, CHINE_RAISE = 0.42, 0.0045  # how much of the booster they run up, and how far they stand out
 
 
 COLLAR_HEIGHT = 0.011  # the dark band where the nose's black cap ends, a little wider than the barrel
@@ -433,9 +434,9 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
     face = np.array([0.86, 0.87, 0.90])  # the chines are lighter than the barrel, as in the pictures
     wall = STEEL * 0.45
     outer = BODY_RADIUS + CHINE_RAISE
-    for side in (-1, 1):  # the chines: raised strips standing proud of the barrel
-        middle = steel_centre + side * CHINE_ANGLE
-        left, right = middle - CHINE_HALF, middle + CHINE_HALF
+    for (offset, half_width), side in ((chine, side) for chine in CHINES for side in (-1, 1)):  # the chines: raised strips standing proud of the barrel
+        middle = steel_centre + side * offset
+        left, right = middle - half_width, middle + half_width
         for piece in range(pieces):
             h0 = slope_top - (slope_top - strip_bottom) * piece / pieces
             h1 = slope_top - (slope_top - strip_bottom) * (piece + 1) / pieces
