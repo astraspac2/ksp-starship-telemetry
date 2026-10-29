@@ -264,3 +264,22 @@ def test_a_failure_is_logged_with_its_reason(tmp_path):
     log = tmp_path / "flap-trace.csv"
     FlapTracker(log).update(0.0, conn_with(Dying()))
     assert "RuntimeError: gone" in log.read_text(encoding="utf-8")
+
+
+def test_each_flap_follows_its_own_deploy_angle_as_it_changes():
+    names = [flap[0] for flap in FLAPS]
+    parts = {name: FakePart(name, dict(RETRACTED)) for name in names}
+    vessel = FakeVessel(RETRACTED)
+    vessel.parts = SimpleNamespace(with_name=lambda name: [parts[name]])
+
+    def set_angles(forward, aft):
+        for name, angle in zip(names, (forward, forward, aft, aft)):
+            parts[name].modules[1].fields["Deploy Angle"] = str(angle)  # the game changes the part's field; the tracker keeps its handle
+
+    tracker = FlapTracker()
+    set_angles(20, 70)  # as on a landing burn: the forward flaps and the aft flaps are set to different angles
+    folds = tracker.update(0.0, conn_with(vessel))
+    assert folds == pytest.approx((20 * FORWARD_FOLD_SCALE, 20 * FORWARD_FOLD_SCALE, 70 * AFT_FOLD_SCALE, 70 * AFT_FOLD_SCALE))
+    set_angles(45, 30)  # the angles change in flight
+    folds = tracker.update(1.0, conn_with(vessel))
+    assert folds == pytest.approx((45 * FORWARD_FOLD_SCALE, 45 * FORWARD_FOLD_SCALE, 30 * AFT_FOLD_SCALE, 30 * AFT_FOLD_SCALE))
