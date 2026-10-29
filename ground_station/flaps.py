@@ -6,8 +6,8 @@ answers that axis). The game does not report the angle a flap is at this moment,
 its Deploy Angle, plus the stick input times the authority limiter on the axes it answers. Nothing here sends anything to the game.
 
 Folds are in degrees, in the order of FLAPS: how far a flap is swung round the hull, away from the heat shield, from the pose the model
-is drawn in. On the pad (retracted, as in the user's picture) all four flaps stick out sideways, which is that pose (fold 0). Deploying swings
-each flap by the deploy angle toward the belly (a negative fold).
+is drawn in. Retracted (as in the user's pictures of the ship on the pad and climbing) the flaps stick out nearly sideways, tilted a little away
+from the heat shield: RETRACTED_FOLD. Deploying swings each flap by the deploy angle toward the belly (a smaller fold).
 """
 
 MODULE_NAME = "ModuleSEPControlSurface"
@@ -22,6 +22,7 @@ FLAP_COUNT = len(FLAPS)
 READ_EVERY_SECONDS = 0.2
 RESCAN_EVERY_SECONDS = 3.0  # looking for the flaps again when they were not found or stopped answering
 FOLD_LIMITS = (-90.0, 90.0)
+RETRACTED_FOLD = 20.0  # where a retracted flap rests: tilted this far from straight out sideways, away from the heat shield
 # which way the stick moves a flap (+1 = toward deployed): pitch works the forward and aft flaps against each other, roll the left and right
 PITCH_SIGN_FORWARD = 1.0
 ROLL_SIGN_LEFT = 1.0
@@ -50,7 +51,7 @@ def fold_degrees(fields: dict, forward: bool, left: bool, pitch: float, yaw: flo
         stick += roll * ROLL_SIGN_LEFT * (1.0 if left else -1.0)
     stick = max(-1.0, min(1.0, stick))  # yaw is not drawn: how the ship's flaps answer it is not known
     current = (deploy_angle if deployed else 0.0) + limiter * stick
-    return max(FOLD_LIMITS[0], min(FOLD_LIMITS[1], -current))  # retracted, a flap rests in the pose the model is drawn in
+    return max(FOLD_LIMITS[0], min(FOLD_LIMITS[1], RETRACTED_FOLD - current))
 
 
 class FlapTracker:

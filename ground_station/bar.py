@@ -15,6 +15,7 @@ from PySide6.QtGui import QColor, QFont, QFontMetricsF, QLinearGradient, QPainte
 from .branding import DEFAULT_FLIGHT_LABEL
 from .countdown import format_clock
 from .earth_map import MapRenderer
+from .flaps import RETRACTED_FOLD
 from .gauges import draw_attitude_dial, draw_engine_cluster, draw_map_dial, draw_value_gauge, rocket_pixels
 from .hud_window import HudWindow
 from .separation import UPPER_STAGE_ENGINES  # the ship's engines, drawn dark until it is the stage that is flying
@@ -83,7 +84,7 @@ ATTITUDE_SNAP_COSINE = 0.34  # a turn of more than about 70 degrees (a new vesse
 ATTITUDE_RESET_SECONDS = 0.5  # after a pause this long (the dial was hidden) it starts again from the real attitude
 ATTITUDE_REDRAW_DELTA = 0.0015  # about a tenth of a degree
 FLAP_SPEED = 45.0  # degrees a second the dial's flaps swing at, toward what the game reports
-FLAP_STOWED_FOLDS = (0.0, 0.0, 0.0, 0.0)  # the flaps drawn before the game has said anything: retracted, as the ship is at launch (all four out sideways)
+FLAP_STOWED_FOLDS = (RETRACTED_FOLD,) * 4  # the flaps drawn before the game has said anything: retracted, as the ship is at launch
 FLAP_STEP = 3.0  # the flaps are redrawn in steps of this many degrees (each new picture of the model costs a few tens of milliseconds)
 DOT_FADE_SECONDS = 0.12  # an engine dot closes about two thirds of the way to lit or dim in this long
 NO_DATA_TEXT = "NO DATA"  # what the booster's gauges say once it cannot be read
