@@ -21,7 +21,14 @@ def test_each_flap_gives_a_row_with_its_state_fields_and_the_pilots_input():
     assert len(rows) == 2 and rows[0]["errors"] == ""
     assert (rows[0]["deployed"], rows[1]["deployed"], rows[0]["authority_limiter"]) == (True, False, 40.0)
     assert rows[0]["input_pitch"] == 0.5 and rows[0]["input_roll"] == -0.25
-    assert "ModuleControlSurface:Deploy Angle=50" in rows[0]["fields"] and "Other" not in rows[0]["fields"]
+    assert "ModuleControlSurface:Deploy Angle=50" in rows[0]["fields"]
+    assert "ModuleControlSurface:Other=x" in rows[0]["fields"]  # every field of a control-surface module is logged
+
+
+def test_fields_of_unrelated_modules_are_left_out():
+    unrelated = SimpleNamespace(name="ModuleLight", fields={"Colour": "red"})
+    row = read_flaps(make_vessel([make_flap(modules=[unrelated])]), 1.0)[0]
+    assert row["fields"] == ""
 
 
 def test_a_module_that_will_not_list_its_fields_is_reported_not_fatal():
