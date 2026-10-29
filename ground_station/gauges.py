@@ -14,7 +14,7 @@ ARC_SPAN_DEG = 240.0  # clockwise over the top to the lower right, leaving a wid
 ARC_START = int(ARC_START_DEG * 16)  # Qt takes 1/16 degree
 ARC_SWEEP = -int(ARC_SPAN_DEG * 16)
 END_TICK_LENGTH = 8.0
-ROCKET_LENGTH = 1.72  # the dial's rocket standing upright, in dial radii
+ROCKET_LENGTH = 2.02  # the dial's rocket standing upright, in dial radii
 
 
 def _backing(painter: QPainter, center: QPointF, radius: float) -> None:
@@ -341,7 +341,6 @@ def draw_attitude_dial(
     outline.setAlpha(135)
     painter.setPen(QPen(outline, 1.3))
     painter.setBrush(Qt.NoBrush)
-    painter.drawEllipse(center, radius, radius)
     painter.drawEllipse(center, radius, radius * math.sin(math.radians(VIEW_ELEVATION_DEG)))  # the horizon plane
 
     faint = QColor(outline)
@@ -361,17 +360,26 @@ def draw_attitude_dial(
     painter.setPen(theme.soft)
     painter.drawText(QRectF(label_centre.x() - 12, label_centre.y() - 12, 24, 24), Qt.AlignCenter, "N")
 
+    def outer_ring() -> None:
+        """The dial's outer circle, drawn last so the rocket, which is bigger than the dial, passes behind it."""
+        painter.setPen(QPen(outline, 1.3))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawEllipse(center, radius, radius)
+
     if pitch_deg is None:
+        outer_ring()
         return
     if rocket_image is not None:
         side = rocket_pixels(radius)
         painter.drawImage(QRectF(center.x() - side / 2, center.y() - side / 2, side, side), rocket_image)
+        outer_ring()
         return
     painter.save()
     painter.translate(center)
     painter.rotate(pitch_deg)
     _draw_rocket(painter, radius * ROCKET_LENGTH, radius * 0.135, theme)
     painter.restore()
+    outer_ring()
 
 
 def rocket_pixels(radius: float) -> float:
