@@ -56,7 +56,7 @@ TILE_HALF_ANGLE = np.radians(105)  # the heat shield: half the circumference in 
 TILE_CENTRE = np.radians(270)  # the side of the ship the heat shield is on, as an angle round the axis (x = cos, z = sin)
 
 FORWARD_FLAP_LEAN = np.radians(22)  # how far the forward flaps lean back from straight out sideways
-AFT_FLAP_LEAN = np.radians(12)  # how far the aft flaps lean forward, toward the heat shield
+AFT_FLAP_LEAN = 0.0  # the aft flaps stick out straight to each side, neither toward the heat shield nor away from it
 FORWARD_FLAP_THICKNESS = 0.012
 AFT_FLAP_THICKNESS = 0.016
 
@@ -190,9 +190,9 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         """A grid fin: a flat lattice sticking out sideways from the booster, bars with dark gaps between them."""
         direction = np.array([np.cos(angle), np.sin(angle)])
         sideways = np.array([-direction[1], direction[0]])
-        inner, outer = BODY_RADIUS * 0.9, BODY_RADIUS + 0.55 * DIAMETER
-        half_width, thickness = 0.20 * DIAMETER, 0.008
-        along_cells, across_cells = 7, 4
+        inner, outer = BODY_RADIUS * 0.9, BODY_RADIUS + 0.30 * DIAMETER
+        half_width, thickness = 0.19 * DIAMETER, 0.008
+        along_cells, across_cells = 5, 5
         def at(along: float, across: float, level: float) -> tuple[float, float, float]:
             x, z = direction * along + sideways * across
             return (float(x), level, float(z))
@@ -201,7 +201,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
             for j in range(across_cells):
                 lo, hi = inner + (outer - inner) * i / along_cells, inner + (outer - inner) * (i + 1) / along_cells
                 left, right = -half_width + 2 * half_width * j / across_cells, -half_width + 2 * half_width * (j + 1) / across_cells
-                hole = i % 2 == 1 and 1 <= i <= along_cells - 2 and 1 <= j <= across_cells - 2  # a bar all round the edge and bars between the gaps: a lattice
+                hole = i % 2 == 1 and j % 2 == 1  # a frame all round and bars between four open windows: a lattice
                 for level in (height + thickness / 2, height - thickness / 2):
                     flat([at(lo, left, level), at(hi, left, level), at(hi, right, level), at(lo, right, level)], FIN_HOLE if hole else FIN, 0.2)
 
@@ -286,7 +286,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         (0.0, ship_height(0.985)),
     ]
     # seen from above (the nose pointing at you, the heat shield below): the forward flaps lean back toward the steel
-    # side, the aft flaps stick out nearly straight, a little toward the heat shield
+    # side, the aft flaps stick out straight to each side
     for mirror in (1, -1):
         flap(TILE_CENTRE + mirror * (np.pi / 2 + FORWARD_FLAP_LEAN), forward, FORWARD_FLAP_THICKNESS)
         flap(TILE_CENTRE + mirror * (np.pi / 2 - AFT_FLAP_LEAN), aft, AFT_FLAP_THICKNESS)
