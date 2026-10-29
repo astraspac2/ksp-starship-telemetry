@@ -232,6 +232,7 @@ def draw_engine_cluster(
     ring: float | None = None,
     dots_alpha: float = 1.0,
     ring_alpha: float = 1.0,
+    ring_reveal: float = 1.0,
 ) -> None:
     """Engine dots inside the current stage's fuel ring. Lit engines are bright, the rest dim.
 
@@ -239,11 +240,12 @@ def draw_engine_cluster(
     cluster in: the ring sweeps round and the dots swell from nothing. `levels` (0 dim .. 1 lit, per dot) overrides
     `lit`, so a dot can be part way between the two while it fades. `ring` (0..1) is how far the fuel ring has filled;
     it follows `grow` unless given, so the ring can fill later and slower than the dots appear. `dots_alpha` and
-    `ring_alpha` fade the dots and the ring apart from each other, as when the cluster leaves.
+    `ring_alpha` fade the dots and the ring apart from each other, and `ring_reveal` (1..0) draws the ring back in on itself,
+    as when the cluster leaves.
     """
     base = painter.opacity()
     painter.setOpacity(base * ring_alpha)
-    _arc(painter, center, radius, fuel_fraction * (grow if ring is None else ring), theme, theme.ring_width + 1.2)
+    _arc(painter, center, radius, fuel_fraction * (grow if ring is None else ring), theme, theme.ring_width + 1.2, reveal=ring_reveal)
     painter.setOpacity(base * dots_alpha)
     inner_ring = QColor(theme.soft)
     inner_ring.setAlpha(70)

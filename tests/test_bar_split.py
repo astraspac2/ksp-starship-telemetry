@@ -142,6 +142,14 @@ def test_a_booster_that_cannot_be_read_says_no_data_in_both_gauges(qapp):
     assert inside > 0
 
 
+@pytest.fixture
+def frozen_clock(monkeypatch):
+    """The clock stands still, so a change of arrangement stays exactly as far along as the test put it."""
+    import time
+
+    monkeypatch.setattr(time, "monotonic", lambda: 5000.0)
+
+
 def at_progress(fraction):
     """The bar part way (0..1) through the change from the stage-sep layout to the split one."""
     import time
@@ -168,33 +176,34 @@ def region_ink(bar, x0, x1, y0, y1):
     )
 
 
-def test_a_leaving_engine_cluster_loses_its_dots_before_its_ring(qapp):
+def test_a_leaving_engine_cluster_loses_its_dots_before_its_ring(qapp, frozen_clock):
     from ground_station.bar import GAUGE_RADIUS
 
     r = GAUGE_RADIUS
     inside = (ENGINE_CENTER_X - r * 0.6, ENGINE_CENTER_X + r * 0.6, GAUGE_Y - r * 0.6, GAUGE_Y + r * 0.6)  # the dots
     top_ring = (ENGINE_CENTER_X - 10, ENGINE_CENTER_X + 10, GAUGE_Y - r - 4, GAUGE_Y - r + 4)  # the top of the ring
-    start, middle = at_progress(0.0), at_progress(0.2)  # a little over half way through the leaving
+    start, middle = at_progress(0.0), at_progress(0.07)  # a quarter of the way through the leaving
     assert region_ink(middle, *inside) < region_ink(start, *inside) * 0.25  # the dots are nearly gone
-    assert region_ink(middle, *top_ring) > region_ink(start, *top_ring) * 0.5  # while the ring is still there
+    assert region_ink(middle, *top_ring) > region_ink(start, *top_ring) * 0.35  # while the ring is still there
 
 
-def test_an_arriving_gauge_shows_its_label_before_its_number(qapp):
+def test_an_arriving_gauge_shows_its_label_before_its_number(qapp, frozen_clock):
     from ground_station.bar import GAUGE_RADIUS
 
     r = GAUGE_RADIUS
     label = (ENGINE_CENTER_X - 40, ENGINE_CENTER_X + 40, GAUGE_Y - r * 0.575 - 2, GAUGE_Y - r * 0.575 + 16)  # SPEED
     number = (ENGINE_CENTER_X - 55, ENGINE_CENTER_X + 55, GAUGE_Y - 22, GAUGE_Y + 22)
-    early, done = at_progress(0.54), at_progress(1.1)  # the arrival starts 40 % of the way in
-    assert region_ink(early, *label) > 0.3 * region_ink(done, *label)  # the label is already coming in
-    assert region_ink(early, *number) < 0.3 * region_ink(done, *number)  # the number is not yet
+    blank, early, done = at_progress(0.295), at_progress(0.4), at_progress(1.1)  # the arrival starts 30 % of the way in
+    gain = lambda bar, area: region_ink(bar, *area) - region_ink(blank, *area)  # noqa: E731  what has come in since the blank
+    assert gain(early, label) > 0.25 * gain(done, label)  # the label is already coming in
+    assert gain(early, number) < 0.2 * gain(done, number)  # the number is not yet
 
 
-def test_the_3d_dial_shrinks_away(qapp):
+def test_the_3d_dial_shrinks_away(qapp, frozen_clock):
     from ground_station.bar import DIAL_RADIUS
 
     whole = (DIAL_CENTER_X - DIAL_RADIUS, DIAL_CENTER_X + DIAL_RADIUS, GAUGE_Y - DIAL_RADIUS, GAUGE_Y + DIAL_RADIUS)
     edge = (DIAL_CENTER_X + DIAL_RADIUS * 0.75, DIAL_CENTER_X + DIAL_RADIUS + 2, GAUGE_Y - 8, GAUGE_Y + 8)  # near its right rim
-    start, middle = at_progress(0.0), at_progress(0.2)
+    start, middle = at_progress(0.0), at_progress(0.14)
     assert region_ink(middle, *edge) < region_ink(start, *edge) * 0.7  # the rim has pulled in
     assert region_ink(middle, *whole) < region_ink(start, *whole)

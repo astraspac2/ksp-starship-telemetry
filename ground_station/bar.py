@@ -103,8 +103,9 @@ RING_FILL_SECONDS = 0.4  # and takes this long to fill
 FADE_OUT_SHARE = 0.4  # the first share of a change is the old element going; the rest is the new one arriving
 # These elements come and go in parts, one after another, as on the overlay: an engine cluster loses its dots and then its ring,
 # the 3D dial shrinks away, and a gauge shows its label first, then sweeps its ring round, then its number. The rest simply fade.
+ARRANGEMENT_EXIT_SHARE = 0.3  # in a change of arrangement the old dials are gone in this share of it (the overlay's are quicker than the map swap's)
 STAGED_ELEMENTS = {"booster", "ship_engines", "dial", "speed", "altitude", "booster_speed", "booster_altitude"}
-DIAL_SMALLEST = 0.6  # how small the 3D dial gets as it leaves, and how small it starts as it arrives
+DIAL_SMALLEST = 0.74  # how small the 3D dial gets as it leaves, and how small it starts as it arrives
 
 
 def _ramp(value: float, start: float, end: float) -> float:
@@ -114,6 +115,12 @@ def _ramp(value: float, start: float, end: float) -> float:
 def _ease(value: float) -> float:
     value = min(max(value, 0.0), 1.0)
     return value * value * (3.0 - 2.0 * value)
+
+
+def _out(value: float) -> float:
+    """Fast at first, then settling: how the overlay's new gauges arrive (measured frame by frame on its video)."""
+    value = min(max(value, 0.0), 1.0)
+    return 1.0 - (1.0 - value) ** 2
 
 DEFAULT_MILESTONES = [Milestone("LIFTOFF", 0.0), Milestone("MAX Q", 70.0), Milestone("STAGE SEP", 143.0)]
 
@@ -155,6 +162,7 @@ class TelemetryBar(HudWindow):
         self._shown_arrangement: Layout | None = None
         self._changed_at = 0.0
         self._fade_seconds = ARRANGEMENT_FADE
+        self._exit_share = FADE_OUT_SHARE  # how much of the change is the old element going
         self._arrived: set[float] = set()  # positions whose dial is new in the change under way: their fuel rings fill in slowly
         self.model_triangles = 0
         self._renderer: ModelRenderer
@@ -596,6 +604,7 @@ class TelemetryBar(HudWindow):
             self._previous, self._shown, self._changed_at = self._shown, kinds, now
             self._previous_arrangement, self._shown_arrangement = self._shown_arrangement, arrangement
             self._fade_seconds = MAP_FADE_SECONDS if self._previous_arrangement is arrangement else ARRANGEMENT_FADE
+            self._exit_share = FADE_OUT_SHARE if self._previous_arrangement is arrangement else ARRANGEMENT_EXIT_SHARE
             self._arrived = {x for x, k in kinds.items() if self._previous is not None and self._previous.get(x) != k}
         progress = fade_progress(now, self._changed_at, self._fade_seconds)
         ring_fill = self._ring_fill(now)
@@ -604,12 +613,12 @@ class TelemetryBar(HudWindow):
             old = self._previous.get(x) if self._previous is not None and progress < 1.0 else kind
             if old == kind:
                 self._draw_element(painter, tel, kind, x, arrangement, upper_live, booster, 1.0, ring_fill if x in self._arrived else 1.0)
-            elif progress < FADE_OUT_SHARE:
-                leaving = progress / FADE_OUT_SHARE
+            elif progress < self._exit_share:
+                leaving = progress / self._exit_share
                 painter.setOpacity(base if old in STAGED_ELEMENTS else base * (1.0 - leaving))
                 self._draw_element(painter, tel, old, x, self._previous_arrangement or arrangement, upper_live, booster, 1.0, 1.0, leaving)
             else:
-                arriving = (progress - FADE_OUT_SHARE) / (1.0 - FADE_OUT_SHARE)
+                arriving = (progress - self._exit_share) / (1.0 - self._exit_share)
                 painter.setOpacity(base if kind in STAGED_ELEMENTS and kind not in ("booster", "ship_engines") else base * arriving)
                 self._draw_element(painter, tel, kind, x, arrangement, upper_live, booster, arriving, ring_fill)
             painter.setOpacity(base)
@@ -619,9 +628,9 @@ class TelemetryBar(HudWindow):
         """SUPER HEAVY under the booster's gauges and STARSHIP under the ship's, fading with the split arrangement."""
         if arrangement is Layout.SPLIT:
             fresh = self._previous_arrangement is not Layout.SPLIT and progress < 1.0
-            alpha = max((progress - FADE_OUT_SHARE) / (1.0 - FADE_OUT_SHARE), 0.0) if fresh else 1.0
+            alpha = _out(_ramp((progress - self._exit_share) / (1.0 - self._exit_share), 0.3, 0.7)) if fresh else 1.0
         elif progress < 1.0 and self._previous_arrangement is Layout.SPLIT:
-            alpha = max(1.0 - progress / FADE_OUT_SHARE, 0.0)
+            alpha = max(1.0 - progress / self._exit_share, 0.0)
         else:
             return
         if alpha <= 0.0:
@@ -687,13 +696,16 @@ class TelemetryBar(HudWindow):
         """One dial at one position. `grow` (0..1) is how far it has arrived and `leaving` (0..1) how far it has gone:
         an engine cluster draws itself in, a gauge shows its label, sweeps its ring and then shows its number."""
         theme = self._theme
-        dots_alpha, ring_alpha = 1.0 - _ramp(leaving, 0.0, 0.55), 1.0 - _ramp(leaving, 0.3, 1.0)
+        # Measured on the overlay's video: the engine dots vanish almost at once, the ring follows, the 3D dial pulls in and
+        # fades quickly, and there is a short blank before the new dials arrive, all together and fast at first.
+        dots_alpha, ring_alpha = 1.0 - _ramp(leaving, 0.0, 0.16), 1.0 - _ramp(leaving, 0.55, 0.9)
+        ring_reveal = 1.0 - _ease(_ramp(leaving, 0.0, 0.7))  # the ring is wiped away from its far end, not faded
         arriving = grow < 1.0 and leaving == 0.0
         gauge = {  # the parts of a gauge, each with its own alpha, and how far its ring has swept
-            "label_alpha": _ramp(grow, 0.0, 0.35) if arriving else 1.0 - _ramp(leaving, 0.5, 1.0),
-            "ring_alpha": _ramp(grow, 0.1, 0.45) if arriving else 1.0 - _ramp(leaving, 0.25, 0.9),
-            "value_alpha": _ramp(grow, 0.3, 0.8) if arriving else 1.0 - _ramp(leaving, 0.0, 0.5),
-            "reveal": _ease(_ramp(grow, 0.1, 0.8)) if arriving else 1.0,
+            "label_alpha": _out(_ramp(grow, 0.0, 0.3)) if arriving else 1.0 - _ramp(leaving, 0.3, 0.7),
+            "ring_alpha": _out(_ramp(grow, 0.0, 0.2)) if arriving else 1.0 - _ramp(leaving, 0.1, 0.65),
+            "value_alpha": _out(_ramp(grow, 0.2, 0.9)) if arriving else 1.0 - _ramp(leaving, 0.0, 0.3),
+            "reveal": _out(_ramp(grow, 0.15, 1.0)) if arriving else 1.0,
         }
         centre = QPointF(x, GAUGE_Y)
         r = GAUGE_RADIUS
@@ -705,20 +717,24 @@ class TelemetryBar(HudWindow):
                 fuel, on, total, lit = booster or (0.0, 0, BOOSTER_ENGINES, (False,) * BOOSTER_ENGINES)
             else:
                 fuel, on, total, lit = tel.fuel_fraction or 0.0, tel.engines_on, tel.engines_total, tel.engine_lit
-            draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit), ring, dots_alpha, ring_alpha)
+            draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit), ring, dots_alpha, ring_alpha, ring_reveal)
         elif kind == "ship_engines":
             if upper_live or arrangement is Layout.FLIGHT:
                 fuel, on, total, lit = tel.fuel_fraction or 0.0, tel.engines_on, tel.engines_total, tel.engine_lit
             else:  # the ship's own readings are not available until it is the vessel being flown
                 fuel, on, total, lit = 0.0, 0, UPPER_STAGE_ENGINES, (False,) * UPPER_STAGE_ENGINES
-            draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit), ring, dots_alpha, ring_alpha)
+            draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit), ring, dots_alpha, ring_alpha, ring_reveal)
         elif kind == "dial":
-            shrink = _ease(leaving) if leaving > 0.0 else 1.0 - _ease(grow)  # it shrinks away, and arrives growing from small
+            if leaving > 0.0:  # it pulls in to about three quarters of its size at once, then fades away
+                size, fade = 1.0 - (1.0 - DIAL_SMALLEST) * _ease(_ramp(leaving, 0.0, 0.4)), _ease(_ramp(leaving, 0.1, 0.95))
+            else:  # and arrives growing from small
+                size = DIAL_SMALLEST + (1.0 - DIAL_SMALLEST) * _out(grow)
+                fade = 1.0 - _out(grow)
             painter.save()
             painter.translate(centre)
-            painter.scale(1.0 - (1.0 - DIAL_SMALLEST) * shrink, 1.0 - (1.0 - DIAL_SMALLEST) * shrink)
+            painter.scale(size, size)
             painter.translate(-centre)
-            painter.setOpacity(painter.opacity() * (1.0 - shrink))
+            painter.setOpacity(painter.opacity() * (1.0 - fade))
             draw_attitude_dial(painter, centre, DIAL_RADIUS, tel.pitch_deg, theme, self._rocket_image(tel))
             painter.restore()
         elif kind in ("speed", "booster_speed"):
