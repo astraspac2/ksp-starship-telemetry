@@ -173,7 +173,7 @@ def test_the_fuel_ring_of_a_newly_arrived_engine_dial_starts_as_its_dots_are_all
     assert bar._ring_fill(arrival + 0.19) == 0.0
     assert bar._ring_fill(arrival + 0.2 + 0.07) > 0.0
     assert 0.4 < bar._ring_fill(arrival + 0.2 + RING_FILL_SECONDS / 2) < 0.6
-    assert bar._ring_fill(arrival + 0.2 + RING_FILL_SECONDS) == 1.0
+    assert bar._ring_fill(arrival + 0.2 + RING_FILL_SECONDS) == pytest.approx(1.0)  # the clock value is large, so floats round
 
 
 def test_the_ring_waits_for_a_slower_arrangement_change_to_bring_its_dots_in(qapp):
