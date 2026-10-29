@@ -329,6 +329,7 @@ def draw_attitude_dial(
     pitch_deg: float | None,
     theme: Theme,
     rocket_image: QImage | None = None,
+    rocket_scale: float = 1.0,
 ) -> None:
     """The attitude globe: a horizon ellipse with north and the compass lines, and the rocket on it.
 
@@ -371,14 +372,14 @@ def draw_attitude_dial(
         outer_ring()
         return
     if rocket_image is not None:
-        side = rocket_pixels(radius)
+        side = rocket_pixels(radius) * rocket_scale
         painter.drawImage(QRectF(center.x() - side / 2, center.y() - side / 2, side, side), rocket_image)
         outer_ring()
         return
     painter.save()
     painter.translate(center)
     painter.rotate(pitch_deg)
-    _draw_rocket(painter, radius * ROCKET_LENGTH, radius * 0.135, theme)
+    _draw_rocket(painter, radius * ROCKET_LENGTH * rocket_scale, radius * 0.135 * rocket_scale, theme)
     painter.restore()
     outer_ring()
 

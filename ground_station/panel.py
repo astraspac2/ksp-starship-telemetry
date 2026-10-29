@@ -498,6 +498,13 @@ class ControlPanel(QMainWindow):
         self._scale.setDecimals(2)
         self._scale.valueChanged.connect(self._store_hud)
         form.addRow("HUD scale", self._scale)
+        self._ship_scale = QDoubleSpinBox()
+        self._ship_scale.setRange(0.5, 2.0)
+        self._ship_scale.setSingleStep(0.05)
+        self._ship_scale.setDecimals(2)
+        self._ship_scale.setToolTip("How big the rocket is in the 3D dial once the booster has separated and only the ship is left. 1.00 is the normal size.")
+        self._ship_scale.valueChanged.connect(self._store_hud)
+        form.addRow("Ship size in the dial (after separation)", self._ship_scale)
 
         self._font = QComboBox()
         self._font.addItem(AUTOMATIC_FONT)
@@ -825,6 +832,7 @@ class ControlPanel(QMainWindow):
         self._thrust_unit.setCurrentIndex(THRUST_UNITS.index(s.thrust_unit))
         self._refresh_rate.setCurrentIndex(REFRESH_HZ.index(s.refresh_hz))
         self._scale.setValue(s.hud_scale)
+        self._ship_scale.setValue(s.ship_scale)
         font_index = self._font.findText(s.font) if s.font else 0
         self._font.setCurrentIndex(max(font_index, 0))
         self._background.setCurrentIndex(BACKGROUNDS.index(s.background))
@@ -953,6 +961,7 @@ class ControlPanel(QMainWindow):
         s.thrust_unit = THRUST_UNITS[self._thrust_unit.currentIndex()]
         s.refresh_hz = REFRESH_HZ[self._refresh_rate.currentIndex()]
         s.hud_scale = round(self._scale.value(), 2)
+        s.ship_scale = round(self._ship_scale.value(), 2)
         s.font = "" if self._font.currentIndex() == 0 else self._font.currentText()
         s.background = BACKGROUNDS[self._background.currentIndex()]
         s.on_top = self._on_top.isChecked()

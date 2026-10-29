@@ -54,6 +54,7 @@ class Settings:
     accent: str = ""  # "" = the look's own accent, else "#RRGGBB"
     panel_opacity: float | None = None  # None = the look's own; else 0..1 for the plates behind the gauges
     hud_scale: float = 1.0
+    ship_scale: float = 1.0  # the 3D dial's rocket size once only the ship is left, as a multiple of its normal size
     font: str = ""  # "" = automatic (bundled Oxanium, then D-DIN)
     background: str = "transparent"
     background_color: str = "#00FF00"  # chroma-key green for capture software
@@ -120,6 +121,7 @@ class Settings:
         within("stream_port", 1, 65535)
         within("countdown_seconds", 1, 24 * 3600)
         within("hud_scale", 0.5, 2.0)
+        within("ship_scale", 0.5, 2.0)
         within("timeline_nodes", 1, 20)
         within("panel_image_dim", 0, 90)
         for name in ("address", "subtitle", "pad_subtitle", "font", "vessel_model", "accent", "background_color", "panel_image"):

@@ -149,6 +149,7 @@ class TelemetryBar(HudWindow):
         self._attitude: np.ndarray | None = None  # the orientation the 3D dial is showing, eased toward the real one
         self._attitude_time = 0.0
         self._attitude_drawn: tuple[np.ndarray, int, bool, object] | None = None  # orientation, separation step, booster only, picture
+        self._ship_scale = 1.0  # the rocket's size in the dial once only the ship is left
         self._flying_booster = False  # the vessel flown is the booster after the separation: its own dial, live
         self._dot_levels: dict[str, list[float]] = {}  # how bright each engine dot is now, 0 (dim) to 1 (lit)
         self._dot_time: dict[str, float] = {}
@@ -195,6 +196,11 @@ class TelemetryBar(HudWindow):
 
     def set_units(self, speed_unit: str, altitude_unit: str) -> None:
         self._speed_unit, self._altitude_unit = speed_unit, altitude_unit
+        self.update()
+
+    def set_ship_scale(self, scale: float) -> None:
+        """How big the rocket is drawn in the 3D dial once only the ship is left (1 = as the full stack's size scaled to the ship)."""
+        self._ship_scale = scale
         self.update()
 
     def set_view_mode(self, mode: str) -> None:
@@ -263,6 +269,13 @@ class TelemetryBar(HudWindow):
         self.model_triangles = mesh.triangle_count
         self.update()
         return error
+
+    def _rocket_scale(self, tel: Telemetry) -> float:
+        """The ship-size setting, eased in over the separation animation, so it only applies once the booster has gone."""
+        if tel.separated_at is None or self._flying_booster:
+            return 1.0
+        done = min(max((tel.t - tel.separated_at) / SEPARATION_ANIMATION_SECONDS, 0.0), 1.0)
+        return 1.0 + (self._ship_scale - 1.0) * done * done * (3.0 - 2.0 * done)
 
     def _rocket_image(self, tel: Telemetry):
         """The 3D rocket for this attitude, or None when the heading is unknown (the dial then draws it flat)."""
@@ -736,7 +749,7 @@ class TelemetryBar(HudWindow):
             painter.scale(size, size)
             painter.translate(-centre)
             painter.setOpacity(painter.opacity() * (1.0 - fade))
-            draw_attitude_dial(painter, centre, DIAL_RADIUS, tel.pitch_deg, theme, self._rocket_image(tel))
+            draw_attitude_dial(painter, centre, DIAL_RADIUS, tel.pitch_deg, theme, self._rocket_image(tel), self._rocket_scale(tel))
             painter.restore()
         elif kind in ("speed", "booster_speed"):
             speed = tel.booster_speed_kmh if kind == "booster_speed" else tel.speed_kmh

@@ -71,6 +71,7 @@ def test_hud_options_out_of_range_fall_back_to_defaults(tmp_path):
                 "background_color": "#12",
                 "panel_opacity": 4,
                 "hud_scale": 9,
+                "ship_scale": 9,
                 "timeline_nodes": 0,
                 "click_through": "yes",
                 "font": 12,

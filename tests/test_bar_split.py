@@ -207,3 +207,38 @@ def test_the_3d_dial_shrinks_away(qapp, frozen_clock):
     start, middle = at_progress(0.0), at_progress(0.14)
     assert region_ink(middle, *edge) < region_ink(start, *edge) * 0.7  # the rim has pulled in
     assert region_ink(middle, *whole) < region_ink(start, *whole)
+
+
+def test_the_ship_size_setting_applies_only_once_the_booster_has_gone(qapp):
+    from ground_station.bar import SEPARATION_ANIMATION_SECONDS
+
+    bar = TelemetryBar()
+    bar.set_ship_scale(1.4)
+    stack = dataclasses.replace(mock_telemetry(100.0), separated_at=None)
+    assert bar._rocket_scale(stack) == 1.0  # the full stack keeps its size
+    during = dataclasses.replace(mock_telemetry(100.0), separated_at=100.0 - SEPARATION_ANIMATION_SECONDS / 2)
+    assert 1.0 < bar._rocket_scale(during) < 1.4  # eased in while the booster drops away
+    alone = dataclasses.replace(mock_telemetry(300.0), separated_at=143.0)
+    assert bar._rocket_scale(alone) == pytest.approx(1.4)
+
+
+def test_the_ship_size_is_drawn_bigger_when_asked(qapp):
+    from ground_station.bar import DIAL_RADIUS, GAUGE_Y, SPEED_CENTER_X  # after the separation the dial is on the right
+
+    def rocket_pixels_in_dial(scale):
+        bar = TelemetryBar()
+        bar.set_ship_scale(scale)
+        tel = dataclasses.replace(mock_telemetry(100.0, 50.0), separated_at=50.0, heading_deg=90.0, pitch_deg=0.0, roll_deg=0.0)
+        bar.set_telemetry(tel)
+        bar.grab()
+        bar._changed_at -= 10.0
+        image = bar.grab().toImage()
+        r = int(DIAL_RADIUS * 1.5)
+        return sum(
+            1
+            for y in range(int(GAUGE_Y) - r, int(GAUGE_Y) + r)
+            for x in range(int(SPEED_CENTER_X) - r, int(SPEED_CENTER_X) + r)
+            if image.pixelColor(x, y).lightness() > 120
+        )
+
+    assert rocket_pixels_in_dial(1.5) > rocket_pixels_in_dial(1.0) * 1.15

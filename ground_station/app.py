@@ -97,6 +97,7 @@ class GroundStationApp:
         self.bar.set_view_mode(s.view_mode)
         self.bar.set_milestones(self.session.milestones())
         self.bar.set_scale(s.hud_scale)
+        self.bar.set_ship_scale(s.ship_scale)
         self.bar.set_background(background)
         self.bar.set_badge(s.show_badge)
         self.bar.set_show_map(s.show_map)
