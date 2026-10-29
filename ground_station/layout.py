@@ -63,7 +63,7 @@ def staged(t: float, observed: float | None) -> bool:
     return observed is not None and t >= observed
 
 
-ARRANGEMENT_FADE = 1.4  # seconds a change of arrangement takes: the old dial goes, then the new one draws itself in
+ARRANGEMENT_FADE = 1.9  # seconds a change of arrangement takes: the old dial goes, then the new one draws itself in (the overlay video, slowed to real time, takes about this long)
 
 
 def fade_progress(now: float, started: float, duration: float = ARRANGEMENT_FADE) -> float:
