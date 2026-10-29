@@ -5,7 +5,7 @@ Deploy (True once deployed), Deploy Angle and Authority Limiter (both degrees), 
 answers that axis). The game does not report the angle a flap is at this moment, so it is worked out: a deployed flap sits at
 its Deploy Angle, plus the stick input times the authority limiter on the axes it answers. Nothing here sends anything to the game.
 
-Folds are in degrees, in the order of FLAPS: how far a flap is folded in toward the heat shield from its fully deployed
+Folds are in degrees, in the order of FLAPS: how far a flap is folded in round the hull, away from the heat shield, from its fully deployed
 (belly-flop) pose. 0 is the pose the model is drawn in.
 """
 

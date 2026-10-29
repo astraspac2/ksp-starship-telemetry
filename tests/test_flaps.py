@@ -202,7 +202,7 @@ def test_when_the_readings_go_the_flaps_return_to_the_pose_they_were_built_in(qa
     assert FLAP_STEP > 0
 
 
-def test_a_folded_flap_turns_toward_the_heat_shield():
+def test_a_folded_flap_turns_away_from_the_heat_shield():
     from ground_station.starship_model import TILE_CENTRE
 
     mesh = starship_stack()
@@ -216,4 +216,4 @@ def test_a_folded_flap_turns_toward_the_heat_shield():
 
     for rig in mesh.flaps:
         tip = rig.first + 2  # the outer lower corner of the upper outline
-        assert distance_from_shield(renderer._vertices[tip]) < distance_from_shield(rest[tip]) - 0.3
+        assert distance_from_shield(renderer._vertices[tip]) > distance_from_shield(rest[tip]) + 0.3

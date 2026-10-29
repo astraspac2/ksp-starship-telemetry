@@ -88,7 +88,7 @@ class ModelRenderer:
         return bool(self._flap_rigs)
 
     def set_flap_folds(self, folds: tuple[float, ...] | None) -> bool:
-        """Swing the model's flaps: `folds` is how far in each is folded from fully deployed, in degrees, in the order forward-left,
+        """Swing the model's flaps: `folds` is how far in each is folded from fully deployed (swung round the hull away from the heat shield), in degrees, in the order forward-left,
         forward-right, aft-left, aft-right; None puts them back as built. Returns whether anything changed (so a new picture is needed)."""
         if not self._flap_rigs or folds == self._folds:
             return False
@@ -96,7 +96,7 @@ class ModelRenderer:
         vertices = self._rest_vertices.copy() if folds is not None else self._rest_vertices
         if folds is not None:
             for rig in self._flap_rigs:
-                angle = -rig.mirror * math.radians(folds[(0 if rig.forward else 2) + (0 if rig.mirror == 1 else 1)])
+                angle = rig.mirror * math.radians(folds[(0 if rig.forward else 2) + (0 if rig.mirror == 1 else 1)])
                 cos, sin = math.cos(angle), math.sin(angle)
                 span = slice(rig.first, rig.first + rig.count)
                 dx, dz = vertices[span, 0] - rig.pivot[0], vertices[span, 2] - rig.pivot[1]

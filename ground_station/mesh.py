@@ -28,7 +28,7 @@ class FlapRig:
     count: int
     pivot: tuple[float, float]
     forward: bool  # a forward flap (just below the nose) rather than an aft one
-    mirror: int  # +1 or -1: which side of the ship; folding turns it by -mirror times the fold angle
+    mirror: int  # +1 or -1: which side of the ship; folding turns it by mirror times the fold angle, away from the heat shield
 
 
 @dataclass
