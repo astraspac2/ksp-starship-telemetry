@@ -83,7 +83,7 @@ ATTITUDE_SNAP_COSINE = 0.34  # a turn of more than about 70 degrees (a new vesse
 ATTITUDE_RESET_SECONDS = 0.5  # after a pause this long (the dial was hidden) it starts again from the real attitude
 ATTITUDE_REDRAW_DELTA = 0.0015  # about a tenth of a degree
 FLAP_SPEED = 45.0  # degrees a second the dial's flaps swing at, toward what the game reports
-FLAP_STOWED_FOLD = 50.0  # how far in the flaps are drawn before the game has said anything: retracted, as the ship is at launch
+FLAP_STOWED_FOLDS = (0.0, 0.0, 50.0, 50.0)  # the flaps drawn before the game has said anything: retracted, as the ship is at launch (forward flaps out sideways, aft flaps tucked in)
 FLAP_STEP = 3.0  # the flaps are redrawn in steps of this many degrees (each new picture of the model costs a few tens of milliseconds)
 DOT_FADE_SECONDS = 0.12  # an engine dot closes about two thirds of the way to lit or dim in this long
 NO_DATA_TEXT = "NO DATA"  # what the booster's gauges say once it cannot be read
@@ -290,7 +290,7 @@ class TelemetryBar(HudWindow):
         self._flap_time = now
         if target is None or len(target) != 4:
             if self._flap_shown is None:
-                self._flap_shown = (FLAP_STOWED_FOLD,) * 4  # nothing read yet: the ship is on the pad with its flaps retracted
+                self._flap_shown = FLAP_STOWED_FOLDS  # nothing read yet: the ship is on the pad with its flaps retracted
             # readings that stop leave the flaps as they were last seen
         elif self._flap_shown is None:
             self._flap_shown = tuple(target)

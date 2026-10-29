@@ -5,8 +5,9 @@ Deploy (True once deployed), Deploy Angle and Authority Limiter (both degrees), 
 answers that axis). The game does not report the angle a flap is at this moment, so it is worked out: a deployed flap sits at
 its Deploy Angle, plus the stick input times the authority limiter on the axes it answers. Nothing here sends anything to the game.
 
-Folds are in degrees, in the order of FLAPS: how far a flap is folded in round the hull, away from the heat shield, from its fully deployed
-(belly-flop) pose. 0 is the pose the model is drawn in.
+Folds are in degrees, in the order of FLAPS: how far a flap is swung round the hull, away from the heat shield, from the pose the model
+is drawn in. On the pad (retracted, as in the user's picture) the forward flaps stick out sideways, which is that pose (fold 0), and the
+aft flaps are tucked in along the hull (fold = the deploy angle). Deploying swings each flap by the deploy angle toward the belly.
 """
 
 MODULE_NAME = "ModuleSEPControlSurface"
@@ -20,7 +21,7 @@ FLAPS = (
 FLAP_COUNT = len(FLAPS)
 READ_EVERY_SECONDS = 0.2
 RESCAN_EVERY_SECONDS = 3.0  # looking for the flaps again when they were not found or stopped answering
-FOLD_LIMITS = (-30.0, 90.0)
+FOLD_LIMITS = (-90.0, 90.0)
 # which way the stick moves a flap (+1 = toward deployed): pitch works the forward and aft flaps against each other, roll the left and right
 PITCH_SIGN_FORWARD = 1.0
 ROLL_SIGN_LEFT = 1.0
@@ -38,7 +39,7 @@ def _flag(text) -> bool:
 
 
 def fold_degrees(fields: dict, forward: bool, left: bool, pitch: float, yaw: float, roll: float) -> float:
-    """How far in from fully deployed one flap is, from its module's fields and the stick input (-1..1 each)."""
+    """How far one flap is swung from the pose the model is drawn in, from its module's fields and the stick input (-1..1 each)."""
     deploy_angle = _number(fields.get("Deploy Angle"), 0.0)
     limiter = _number(fields.get("Authority Limiter"), 0.0)
     deployed = _flag(fields.get("Deploy"))
@@ -49,7 +50,8 @@ def fold_degrees(fields: dict, forward: bool, left: bool, pitch: float, yaw: flo
         stick += roll * ROLL_SIGN_LEFT * (1.0 if left else -1.0)
     stick = max(-1.0, min(1.0, stick))  # yaw is not drawn: how the ship's flaps answer it is not known
     current = (deploy_angle if deployed else 0.0) + limiter * stick
-    return max(FOLD_LIMITS[0], min(FOLD_LIMITS[1], deploy_angle - current))
+    retracted = 0.0 if forward else deploy_angle  # where the flap rests when retracted: forward flaps out sideways, aft flaps tucked in
+    return max(FOLD_LIMITS[0], min(FOLD_LIMITS[1], retracted - current))
 
 
 class FlapTracker:
