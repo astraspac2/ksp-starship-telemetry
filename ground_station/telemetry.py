@@ -26,6 +26,10 @@ class Telemetry:
     thrust_n: float | None = None  # total thrust of the engines being flown, in newtons; None = not known
     max_thrust_n: float | None = None  # the same engines' thrust at full throttle, the 100 % mark of the thrust gauge
     throttle: float | None = None  # the throttle setting, 0..1
+    booster_speed_kmh: float | None = None  # the booster left behind at separation, while the game still reports it
+    booster_altitude_km: float | None = None
+    booster_live: bool = False  # the booster's numbers are being read; once False they are gone for good
+    on_booster: bool = False  # the vessel being flown carries the booster's engines: with the separation seen, that is the booster itself
 
 
 MOCK_UPPER_ENGINES = 6

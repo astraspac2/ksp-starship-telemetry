@@ -2,8 +2,10 @@
 
 Three arrangements, as on the Starship overlay, and a fourth for the pad:
   stage 1     booster engines and attitude dial on the left, speed and altitude on the right (until shortly before Stage Sep)
-  stage sep   booster engines + dial on the left, speed + the upper stage's engines on the right (from 5 s before to 10 s after)
+  stage sep   booster engines + dial on the left, speed + the upper stage's engines on the right (from 5 s before to 15 s after)
   flight      speed and altitude on the left, dial and the upper stage's engines on the right (after that)
+  split       once the stage separation is over and the booster is still being read: its speed and altitude on the left
+              (SUPER HEAVY), the ship's speed and engines on the right (STARSHIP). When the booster is gone, flight again
   pad         engines and dial on the left, thrust and throttle on the right (the operator's pad / static-fire mode; it
               never follows the Stage Sep marker)
 
@@ -15,7 +17,7 @@ from enum import Enum
 from .timeline import Milestone
 
 STAGE_SEP_LEAD = 5.0  # the stage-sep arrangement appears this long before the marker
-STAGE_SEP_TAIL = 10.0  # and gives way to the flight arrangement this long after it
+STAGE_SEP_TAIL = 15.0  # and gives way to the flight arrangement this long after it
 _STAGE_SEP_NAMES = {"stage sep", "stage separation"}
 
 
@@ -23,6 +25,7 @@ class Layout(Enum):
     STAGE_1 = "stage 1"
     STAGE_SEP = "stage sep"
     FLIGHT = "flight"
+    SPLIT = "split"
     PAD = "pad"
 
 
@@ -36,21 +39,23 @@ def stage_sep_time(milestones: list[Milestone]) -> float | None:
     return next((m.time for m in milestones if is_stage_sep(m.name)), None)
 
 
-def layout_for(t: float, planned: float | None, observed: float | None = None) -> Layout:
+def layout_for(t: float, planned: float | None, observed: float | None = None, booster_live: bool = False) -> Layout:
     """The arrangement at flight time t.
 
     `planned` is the Stage Sep marker; it brings the stage-sep arrangement in ahead of time. `observed` is when the
     separation was actually seen in the data; once it is known it decides when the flight arrangement takes over,
-    and it brings the stage-sep arrangement in at once if the stack separated earlier than planned.
+    and it brings the stage-sep arrangement in at once if the stack separated earlier than planned. While the booster
+    is still being read (`booster_live`) the split arrangement takes the flight arrangement's place.
     """
+    after = Layout.SPLIT if booster_live else Layout.FLIGHT
     if observed is not None:
         start = observed if planned is None else min(planned - STAGE_SEP_LEAD, observed)
         if t < start:
             return Layout.STAGE_1
-        return Layout.STAGE_SEP if t < observed + STAGE_SEP_TAIL else Layout.FLIGHT
+        return Layout.STAGE_SEP if t < observed + STAGE_SEP_TAIL else after
     if planned is None or t < planned - STAGE_SEP_LEAD:
         return Layout.STAGE_1
-    return Layout.STAGE_SEP if t < planned + STAGE_SEP_TAIL else Layout.FLIGHT
+    return Layout.STAGE_SEP if t < planned + STAGE_SEP_TAIL else after
 
 
 def staged(t: float, observed: float | None) -> bool:

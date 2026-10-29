@@ -1,3 +1,5 @@
+import dataclasses
+
 import pytest
 
 from ground_station.krpc_source import ConnState, LiveSample, ReaderStatus
@@ -105,3 +107,13 @@ def test_no_connection_shows_no_values():
 )
 def test_status_text(st, expected):
     assert status_text(st) == expected
+
+
+def test_the_boosters_numbers_are_converted_and_only_present_when_read():
+    clock = running_clock()
+    live = sample(met=200.0, situation="flying", speed=100.0, altitude=2500.0, pitch=80.0)
+    live = dataclasses.replace(live, booster_speed_ms=250.0, booster_altitude_m=60_000.0, booster_live=True)
+    tel = live_telemetry(clock, status(s=live))
+    assert tel.booster_live and tel.booster_speed_kmh == pytest.approx(900.0) and tel.booster_altitude_km == pytest.approx(60.0)
+    plain = live_telemetry(clock, status(s=sample(met=200.0, situation="flying", speed=100.0, altitude=2500.0, pitch=80.0)))
+    assert not plain.booster_live and plain.booster_speed_kmh is None and plain.booster_altitude_km is None

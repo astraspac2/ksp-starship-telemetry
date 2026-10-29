@@ -64,6 +64,8 @@ class ModelRenderer:
         self._is_booster = self._vertices[self._faces][:, :, 1].mean(axis=1) < split
         self._ship_centre = (0.5 + split) / 2  # height of the ship's middle
         self._ship_zoom = SHIP_SHARE_OF_DIAL / (0.5 - split)  # scale that settles the ship at its size in the dial
+        self._booster_centre = (-0.5 + split) / 2  # and the same for the booster, when it is the vessel being flown
+        self._booster_zoom = SHIP_SHARE_OF_DIAL / (split + 0.5)
         self._solid, self._outward = self._facing_signs(mesh)
         self._colours = mesh.face_colors if mesh.face_colors is not None else np.tile(BASE_COLOUR, (len(mesh.faces), 1))
         self.size_px = size_px
@@ -100,9 +102,16 @@ class ModelRenderer:
         self._cache[key] = image
         return image
 
-    def _stage_triangles(self, step: int) -> tuple[np.ndarray, np.ndarray]:
-        """Triangle corners (model space) and which of them to draw, for a step of the separation animation."""
+    def _stage_triangles(self, step: int, booster_only: bool = False) -> tuple[np.ndarray, np.ndarray]:
+        """Triangle corners (model space) and which of them to draw, for a step of the separation animation.
+
+        With `booster_only` it is the booster alone, settled in the dial like the ship is after the separation."""
         corners = self._vertices[self._faces]  # (M, 3, 3)
+        if booster_only:
+            corners = corners.copy()
+            corners[:, :, 1] -= self._booster_centre
+            corners *= self._booster_zoom
+            return corners, np.flatnonzero(self._is_booster)
         if step == 0:
             return corners, np.arange(len(self._faces))
         p = step / PROGRESS_STEPS
@@ -115,18 +124,18 @@ class ModelRenderer:
         keep = np.arange(len(self._faces)) if step < PROGRESS_STEPS else np.flatnonzero(~self._is_booster)
         return corners, keep
 
-    def render_matrix(self, axes: np.ndarray, separation: float = 0.0) -> QImage:
+    def render_matrix(self, axes: np.ndarray, separation: float = 0.0, booster_only: bool = False) -> QImage:
         """The model for an exact orientation (columns: right, nose, top in east/north/up), without rounding to a degree.
 
         For a smoothly turning dial; nothing is cached, so call it only when the orientation has really changed.
         """
-        return self._draw_matrix(axes, round(min(max(separation, 0.0), 1.0) * PROGRESS_STEPS))
+        return self._draw_matrix(axes, round(min(max(separation, 0.0), 1.0) * PROGRESS_STEPS), booster_only)
 
     def _draw(self, pitch: float, heading: float, roll: float, step: int = 0) -> QImage:
         return self._draw_matrix(body_to_world(pitch, heading, roll), step)
 
-    def _draw_matrix(self, axes: np.ndarray, step: int) -> QImage:
-        corners, keep = self._stage_triangles(step)
+    def _draw_matrix(self, axes: np.ndarray, step: int, booster_only: bool = False) -> QImage:
+        corners, keep = self._stage_triangles(step, booster_only)
         world = corners[keep].reshape(-1, 3) @ axes.T
         view = world @ self._view.T  # x right, y up, z away from the viewer
         tri = view.reshape(-1, 3, 3)

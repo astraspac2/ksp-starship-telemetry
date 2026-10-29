@@ -8,11 +8,12 @@ import math
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Callable
 
 from . import sep_cluster
+from .booster import BoosterTracker
 from .branding import KRPC_CLIENT_NAME
 from .attitude import attitude_from_rotation
 
@@ -66,6 +67,10 @@ class LiveSample:
     thrust_n: float | None = None  # total thrust of the engines being flown, in newtons; None = burning but not known
     max_thrust_n: float | None = None  # what those engines would give at full throttle; None = not known
     throttle: float | None = None  # the throttle setting, 0..1
+    booster_speed_ms: float | None = None  # the booster left behind at separation, while the game still reports it
+    booster_altitude_m: float | None = None
+    booster_live: bool = False
+    has_booster_cluster: bool = False  # the vessel being flown carries the booster's engine cluster (the stack, or the booster itself)
 
 
 @dataclass(frozen=True)
@@ -398,6 +403,7 @@ class KrpcReader:
         self._server_version: str | None = None
         self.altitude_mode = "surface"  # "surface" (above ground/sea) or "sea" (above sea level); may change while running
         self._rated_memory: dict[str, float] = {}
+        self._booster = BoosterTracker()
 
     def _default_connect(self):
         import krpc
@@ -469,6 +475,7 @@ class KrpcReader:
 
     def _poll(self, conn) -> None:
         streams = _Streams(conn, lambda: self.altitude_mode, self._rated_memory)
+        self._booster.reset()
         with self._lock:
             self._server_version = self._read_server_version(conn)
         self._set(ConnState.CONNECTED, None)
@@ -483,6 +490,10 @@ class KrpcReader:
                 else:
                     streams.refresh_stage()
             sample = streams.read(now)
+            sample = replace(sample, has_booster_cluster=bool(streams.sep))
+            booster = self._booster.update(now, conn.space_center, bool(streams.sep), self.altitude_mode)
+            if booster.live:
+                sample = replace(sample, booster_speed_ms=booster.speed_ms, booster_altitude_m=booster.altitude_m, booster_live=True)
             with self._lock:
                 self._sample = sample
             self._stop.wait(self._poll_interval)

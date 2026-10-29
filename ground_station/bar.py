@@ -83,6 +83,7 @@ ATTITUDE_SNAP_COSINE = 0.34  # a turn of more than about 70 degrees (a new vesse
 ATTITUDE_RESET_SECONDS = 0.5  # after a pause this long (the dial was hidden) it starts again from the real attitude
 ATTITUDE_REDRAW_DELTA = 0.0015  # about a tenth of a degree
 DOT_FADE_SECONDS = 0.12  # an engine dot closes about two thirds of the way to lit or dim in this long
+SIDE_LABEL_Y = GAUGE_Y + 57  # the SUPER HEAVY / STARSHIP names sit in the gap under each pair of gauges
 SEPARATION_ANIMATION_SECONDS = 4.0  # the dial's booster drops away and the ship fills it over this long
 BOOSTER_ENGINES = 33  # the booster's dots, drawn dark once it has separated
 # What sits at each position (centre x) in each arrangement. Where the element at a position changes, the old one fades
@@ -91,6 +92,7 @@ ELEMENTS = {
     Layout.STAGE_1: {ENGINE_CENTER_X: "booster", DIAL_CENTER_X: "dial", SPEED_CENTER_X: "speed", ALTITUDE_CENTER_X: "altitude"},
     Layout.STAGE_SEP: {ENGINE_CENTER_X: "booster", DIAL_CENTER_X: "dial", SPEED_CENTER_X: "speed", ALTITUDE_CENTER_X: "ship_engines"},
     Layout.FLIGHT: {ENGINE_CENTER_X: "speed", DIAL_CENTER_X: "altitude", SPEED_CENTER_X: "dial", ALTITUDE_CENTER_X: "ship_engines"},
+    Layout.SPLIT: {ENGINE_CENTER_X: "booster_speed", DIAL_CENTER_X: "booster_altitude", SPEED_CENTER_X: "speed", ALTITUDE_CENTER_X: "ship_engines"},
     Layout.PAD: {PAD_ENGINE_X: "booster", PAD_THRUST_X: "thrust", PAD_THROTTLE_X: "throttle"},
 }
 MAP_FADE_SECONDS = 0.6  # the engine dial and the map swapping places; a change of arrangement takes the slower ARRANGEMENT_FADE
@@ -124,7 +126,8 @@ class TelemetryBar(HudWindow):
         self._smoothing = True  # ease the 3D dial and the engine dots between readings (off for exact still frames)
         self._attitude: np.ndarray | None = None  # the orientation the 3D dial is showing, eased toward the real one
         self._attitude_time = 0.0
-        self._attitude_drawn: tuple[np.ndarray, int, object] | None = None  # orientation, separation step, picture
+        self._attitude_drawn: tuple[np.ndarray, int, bool, object] | None = None  # orientation, separation step, booster only, picture
+        self._flying_booster = False  # the vessel flown is the booster after the separation: its own dial, live
         self._dot_levels: dict[str, list[float]] = {}  # how bright each engine dot is now, 0 (dim) to 1 (lit)
         self._dot_time: dict[str, float] = {}
         self._map = MapRenderer(MAP_PICTURE_PX)
@@ -241,7 +244,8 @@ class TelemetryBar(HudWindow):
         """The 3D rocket for this attitude, or None when the heading is unknown (the dial then draws it flat)."""
         if tel.pitch_deg is None or tel.heading_deg is None:
             return None
-        separation = 0.0 if tel.separated_at is None else (tel.t - tel.separated_at) / SEPARATION_ANIMATION_SECONDS
+        booster_only = self._flying_booster
+        separation = 0.0 if tel.separated_at is None or booster_only else (tel.t - tel.separated_at) / SEPARATION_ANIMATION_SECONDS
         step = round(min(max(separation, 0.0), 1.0) * PROGRESS_STEPS)
         target = body_to_world(90.0 - tel.pitch_deg, tel.heading_deg, tel.roll_deg or 0.0)
         now = time.monotonic()
@@ -256,11 +260,11 @@ class TelemetryBar(HudWindow):
                 shown = np.column_stack([right, nose, np.cross(right, nose)])  # keep it a true rotation
         self._attitude, self._attitude_time = shown, now
         if self._attitude_drawn is not None:
-            last, last_step, picture = self._attitude_drawn
-            if last_step == step and float(np.abs(last - shown).max()) < ATTITUDE_REDRAW_DELTA:
+            last, last_step, last_booster, picture = self._attitude_drawn
+            if last_step == step and last_booster == booster_only and float(np.abs(last - shown).max()) < ATTITUDE_REDRAW_DELTA:
                 return picture  # it has not moved enough to show: keep the picture
-        picture = self._renderer.render_matrix(shown, separation)
-        self._attitude_drawn = (shown, step, picture)
+        picture = self._renderer.render_matrix(shown, separation, booster_only)
+        self._attitude_drawn = (shown, step, booster_only, picture)
         return picture
 
     def paintEvent(self, _event) -> None:
@@ -557,8 +561,16 @@ class TelemetryBar(HudWindow):
 
     def _draw_panels(self, painter: QPainter, tel: Telemetry) -> None:
         sep_time = stage_sep_time(self._milestones)
-        arrangement = Layout.PAD if self._pad else layout_for(tel.t, sep_time, tel.separated_at)  # the pad ignores Stage Sep
-        upper_live = False if self._pad else staged(tel.t, tel.separated_at)
+        # After the separation, flying the booster itself (its engines are on the vessel) brings the stage 1 arrangement back
+        # with the booster's own live readings, its engine dial and its 3D model.
+        self._flying_booster = not self._pad and tel.separated_at is not None and tel.t >= tel.separated_at and tel.on_booster
+        if self._pad:
+            arrangement = Layout.PAD  # the pad ignores Stage Sep
+        elif self._flying_booster:
+            arrangement = Layout.STAGE_1
+        else:
+            arrangement = layout_for(tel.t, sep_time, tel.separated_at, tel.booster_live)
+        upper_live = False if self._pad or self._flying_booster else staged(tel.t, tel.separated_at)
         if not upper_live:
             self._booster.record(tel.t, (tel.fuel_fraction or 0.0, tel.engines_on, tel.engines_total, tel.engine_lit), tel.engines_total)
         booster = self._booster.before(tel.separated_at) if upper_live else None
@@ -585,6 +597,25 @@ class TelemetryBar(HudWindow):
                 painter.setOpacity(base * arriving)
                 self._draw_element(painter, tel, kind, x, arrangement, upper_live, booster, arriving, ring_fill)
             painter.setOpacity(base)
+        self._draw_side_labels(painter, arrangement, progress, base)
+
+    def _draw_side_labels(self, painter: QPainter, arrangement: Layout, progress: float, base: float) -> None:
+        """SUPER HEAVY under the booster's gauges and STARSHIP under the ship's, fading with the split arrangement."""
+        if arrangement is Layout.SPLIT:
+            fresh = self._previous_arrangement is not Layout.SPLIT and progress < 1.0
+            alpha = max((progress - FADE_OUT_SHARE) / (1.0 - FADE_OUT_SHARE), 0.0) if fresh else 1.0
+        elif progress < 1.0 and self._previous_arrangement is Layout.SPLIT:
+            alpha = max(1.0 - progress / FADE_OUT_SHARE, 0.0)
+        else:
+            return
+        if alpha <= 0.0:
+            return
+        painter.setOpacity(base * alpha)
+        painter.setFont(self._theme.make_font(13, QFont.Bold, 1.0))
+        painter.setPen(self._theme.text)
+        for centre, text in (((ENGINE_CENTER_X + DIAL_CENTER_X) / 2, "SUPER HEAVY"), ((SPEED_CENTER_X + ALTITUDE_CENTER_X) / 2, "STARSHIP")):
+            painter.drawText(QRectF(centre - 100, SIDE_LABEL_Y - 10, 200, 20), Qt.AlignCenter, text)
+        painter.setOpacity(base)
 
     def _ring_fill(self, now: float) -> float:
         """How far the fuel rings of newly arrived engine dials have filled (0..1): they wait until the dots are all but there, then sweep round."""
@@ -657,15 +688,15 @@ class TelemetryBar(HudWindow):
             draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit), ring)
         elif kind == "dial":
             draw_attitude_dial(painter, centre, DIAL_RADIUS, tel.pitch_deg, theme, self._rocket_image(tel))
-        elif kind == "speed":
-            speed = tel.speed_kmh
+        elif kind in ("speed", "booster_speed"):
+            speed = tel.booster_speed_kmh if kind == "booster_speed" else tel.speed_kmh
             text, label = ("", format_speed(0.0, self._speed_unit)[1]) if speed is None else format_speed(speed, self._speed_unit)
             draw_value_gauge(
                 painter, centre, r, 0.0 if speed is None else speed / SPEED_FULL_SCALE_KMH, "SPEED", no_data if speed is None else text, label, theme,
                 arrangement is Layout.FLIGHT,
             )
-        elif kind == "altitude":
-            altitude = tel.altitude_km
+        elif kind in ("altitude", "booster_altitude"):
+            altitude = tel.booster_altitude_km if kind == "booster_altitude" else tel.altitude_km
             text, label = (
                 ("", format_altitude(0.0, self._altitude_unit)[1]) if altitude is None else format_altitude(altitude, self._altitude_unit)
             )

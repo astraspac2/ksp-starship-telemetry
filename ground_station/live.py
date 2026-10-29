@@ -44,4 +44,8 @@ def live_telemetry(clock: CountdownClock, status: ReaderStatus) -> Telemetry:
         thrust_n=sample.thrust_n,
         max_thrust_n=sample.max_thrust_n,
         throttle=sample.throttle,
+        booster_speed_kmh=None if sample.booster_speed_ms is None else sample.booster_speed_ms * 3.6,
+        booster_altitude_km=None if sample.booster_altitude_m is None else sample.booster_altitude_m / 1000.0,
+        booster_live=sample.booster_live,
+        on_booster=sample.has_booster_cluster,
     )
