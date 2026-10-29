@@ -25,7 +25,7 @@ SHIP_LENGTH = 0.40  # a little over a third of the stack, so the booster is the 
 SPLIT_Y = 0.5 - SHIP_LENGTH  # where the ship's bottom meets the booster, in model height
 BODY_RADIUS = 0.034  # the ship is about 5.9 diameters long, as measured on the picture of it
 DIAMETER = 2 * BODY_RADIUS
-NOSE_SHARE = 0.20  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
+NOSE_SHARE = 0.27  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
 NOSE_BLACK_SHARE = 0.97  # of the nose is black tile all the way round, even on the steel side
 HOT_STAGE_HEIGHT = 0.022
 SKIRT_TOP = -0.47  # the engine skirt runs from here down to the bells at -0.5
@@ -66,7 +66,7 @@ SHIP_BELT = np.array([0.38, 0.39, 0.43])  # the dark seams round the ship
 RACEWAY = np.array([0.82, 0.83, 0.86])  # the two pipes running down the ship's steel side
 RACEWAY_OFFSET = np.radians(19.3)  # how far either side of the steel side's centre line they run
 RACEWAY_FROM, RACEWAY_TO = 0.35, 0.95  # as fractions of the ship's length from its tip
-WINDOWS_FROM, WINDOWS_TO = 0.200, 0.235  # the band with the two dark hatches and the logo between them, as fractions from the tip
+WINDOWS_FROM, WINDOWS_TO = 0.305, 0.340  # the band with the two dark hatches and the logo between them, as fractions from the tip
 HATCH_OFFSET = np.radians(32)  # how far either side of the steel side's centre line a hatch sits
 HATCH = np.array([0.13, 0.13, 0.16])
 HATCH_RIM = np.array([0.40, 0.41, 0.45])
@@ -85,7 +85,7 @@ def _nose_radius(s: float) -> float:
     a diameter long (the picture of the real nose: more than half the width already a tenth of the way down), reaching the barrel's
     width tangentially and carrying on as barrel."""
     u = min(max(s / DOME_SHARE, 0.0), 1.0)
-    return BODY_RADIUS * float(np.sin(0.5 * np.pi * u ** 0.76))
+    return BODY_RADIUS * float(np.sin(0.5 * np.pi * u ** 0.85))
 
 
 def _body_radius(height: float) -> float:
@@ -356,8 +356,8 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         (0.0, ship_height(0.190)),
     ]
     aft = [  # measured on the picture: a long slanted top edge, a straight outer edge down almost to the bottom
-        (0.0, ship_height(0.830)),
-        (0.42 * DIAMETER, ship_height(0.885)),
+        (0.0, ship_height(0.760)),
+        (0.42 * DIAMETER, ship_height(0.830)),
         (0.42 * DIAMETER, ship_height(1.0)),
         (0.0, ship_height(1.0)),
     ]
