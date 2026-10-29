@@ -25,7 +25,7 @@ SHIP_LENGTH = 0.40  # a little over a third of the stack, so the booster is the 
 SPLIT_Y = 0.5 - SHIP_LENGTH  # where the ship's bottom meets the booster, in model height
 BODY_RADIUS = 0.034  # the ship is about 5.9 diameters long, as measured on the picture of it
 DIAMETER = 2 * BODY_RADIUS
-NOSE_SHARE = 0.175  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
+NOSE_SHARE = 0.20  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
 NOSE_BLACK_SHARE = 0.97  # of the nose is black tile all the way round, even on the steel side
 HOT_STAGE_HEIGHT = 0.022
 SKIRT_TOP = -0.47  # the engine skirt runs from here down to the bells at -0.5
@@ -85,7 +85,7 @@ def _nose_radius(s: float) -> float:
     a diameter long (the picture of the real nose: more than half the width already a tenth of the way down), reaching the barrel's
     width tangentially and carrying on as barrel."""
     u = min(max(s / DOME_SHARE, 0.0), 1.0)
-    return BODY_RADIUS * float(np.sin(0.5 * np.pi * u ** 0.65))
+    return BODY_RADIUS * float(np.sin(0.5 * np.pi * u ** 0.76))
 
 
 def _body_radius(height: float) -> float:
@@ -356,8 +356,8 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         (0.0, ship_height(0.190)),
     ]
     aft = [  # measured on the picture: a long slanted top edge, a straight outer edge down almost to the bottom
-        (0.0, ship_height(0.730)),
-        (0.42 * DIAMETER, ship_height(0.851)),
+        (0.0, ship_height(0.830)),
+        (0.42 * DIAMETER, ship_height(0.885)),
         (0.42 * DIAMETER, ship_height(0.979)),
         (0.0, ship_height(0.985)),
     ]
