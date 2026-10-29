@@ -74,6 +74,7 @@ class ModelRenderer:
         self._solid, self._outward = self._facing_signs(mesh)
         self._smooth = self._smooth_normals(mesh)  # (M, 3) outward model-space normals of round faces (zero where the face is flat)
         self._gloss = mesh.face_gloss.astype(np.float64) if mesh.face_gloss is not None else np.zeros(len(mesh.faces))
+        self._lift = mesh.face_lift.astype(np.float64) if mesh.face_lift is not None else np.zeros(len(mesh.faces))
         self._colours = mesh.face_colors if mesh.face_colors is not None else np.tile(BASE_COLOUR, (len(mesh.faces), 1))
         self.size_px = size_px
         self._cache: dict[tuple[int, int, int, int], QImage] = {}
@@ -178,7 +179,7 @@ class ModelRenderer:
             normal[rounded] = in_view / np.maximum(np.linalg.norm(in_view, axis=1), 1e-9)[:, None]
         shade = AMBIENT + (1 - AMBIENT) * np.clip(normal @ light, 0.0, 1.0)
         shade = np.where(solid, (SOLID_LIFT + (1 - SOLID_LIFT) * shade) * (EDGE_DARKENING + (1 - EDGE_DARKENING) * np.abs(normal[:, 2])), shade)  # round bodies fall away toward their edges
-        depth = -tri[:, :, 2].mean(axis=1)
+        depth = -tri[:, :, 2].mean(axis=1) + self._lift[keep]  # a part lying on a surface is drawn after the surface's own faces
         depth[away] = np.inf  # sorted to the end, then dropped
         order = np.argsort(depth)[: len(depth) - int(away.sum())]  # farthest first
 
