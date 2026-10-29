@@ -43,7 +43,7 @@ from .clock import ClockState
 from .events import Event, event_status, format_clock_text, parse_clock, sorted_events
 from .forest_art import render_forest
 from .krpc_source import EXPECTED_KRPC_VERSION, ConnState
-from .mesh import ModelError, load_mesh, normalize
+from .mesh import ModelError, load_prepared
 from .panel_backdrops import BACKDROP_THEMES, render_backdrop
 from .mock_game import WARP_RATES
 from .session import Session
@@ -1095,7 +1095,7 @@ class ControlPanel(QMainWindow):
         s = self._session.settings
         if path:
             try:
-                mesh = normalize(load_mesh(path), flip=s.vessel_model_flip)
+                mesh = load_prepared(path, s.vessel_model_flip)
             except ModelError as exc:
                 self.statusBar().showMessage(f"That model could not be used: {exc}")
                 return

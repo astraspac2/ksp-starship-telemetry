@@ -248,3 +248,17 @@ def test_the_booster_has_three_grid_fins_and_none_on_the_steel_side():
     assert (away < 150).all()  # nothing on the opposite (steel) side
     for turn in (0, 90, -90):
         assert (np.abs((angles - (shield + turn) + 180) % 360 - 180) < 25).any()  # a fin on the shield side and one out to each side
+
+
+def test_a_prepared_model_is_thinned_out_only_once_per_file_and_flip(tmp_path, monkeypatch):
+    from ground_station import mesh as mesh_module
+
+    path = tmp_path / "rocket.obj"
+    path.write_text("v 0 0 0\nv 1 0 0\nv 0 5 0\nv 0 0 1\nf 1 2 3\nf 1 3 4\n")
+    calls = []
+    real = mesh_module.normalize
+    monkeypatch.setattr(mesh_module, "normalize", lambda *args, **kwargs: calls.append(1) or real(*args, **kwargs))
+    first = mesh_module.load_prepared(path, False)
+    assert mesh_module.load_prepared(path, False) is first and len(calls) == 1  # the second ask costs nothing
+    mesh_module.load_prepared(path, True)
+    assert len(calls) == 2  # a different flip is a different model

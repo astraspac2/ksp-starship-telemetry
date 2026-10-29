@@ -204,6 +204,26 @@ def _parse_gltf(data: bytes, folder: Path, binary: bool) -> Mesh:
 
 
 # tidying
+_PREPARED: dict[tuple, Mesh] = {}
+
+
+def load_prepared(path: str | Path, flip: bool = False) -> Mesh:
+    """load_mesh + normalize, remembered per file (and its modified time) and flip, so a big model is thinned out only once:
+    the panel and the bar both ask for it, and the bar asks again every time any setting changes."""
+    path = Path(path)
+    try:
+        stamp = path.stat().st_mtime_ns
+    except OSError as exc:
+        raise ModelError(f"Could not read the file: {exc}") from exc
+    key = (str(path), stamp, bool(flip))
+    mesh = _PREPARED.get(key)
+    if mesh is None:
+        mesh = normalize(load_mesh(path), flip=flip)
+        _PREPARED.clear()  # only the model in use is worth keeping
+        _PREPARED[key] = mesh
+    return mesh
+
+
 def normalize(mesh: Mesh, flip: bool = False, max_triangles: int = DEFAULT_MAX_TRIANGLES) -> Mesh:
     """Centre the model, stand its long axis along +Y nose up, scale it to one unit long, and thin it out."""
     vertices = mesh.vertices.astype(np.float64)

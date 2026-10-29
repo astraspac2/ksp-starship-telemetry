@@ -19,7 +19,7 @@ from .gauges import draw_attitude_dial, draw_engine_cluster, draw_map_dial, draw
 from .hud_window import HudWindow
 from .separation import UPPER_STAGE_ENGINES  # the ship's engines, drawn dark until it is the stage that is flying
 from .layout import ARRANGEMENT_FADE, BoosterMemory, Layout, fade_progress, layout_for, stage_sep_time, staged
-from .mesh import ModelError, builtin_rocket, load_mesh, normalize
+from .mesh import ModelError, builtin_rocket, load_prepared
 from .starship_model import starship_stack
 from .render3d import PROGRESS_STEPS, ModelRenderer, body_to_world
 from .source import DataSource
@@ -255,7 +255,7 @@ class TelemetryBar(HudWindow):
         mesh = starship_stack() if starship else builtin_rocket()
         if path:
             try:
-                mesh = normalize(load_mesh(path), flip=flip)
+                mesh = load_prepared(path, flip)
             except ModelError as exc:
                 error = str(exc)
         self._renderer = ModelRenderer(mesh, round(rocket_pixels(DIAL_RADIUS)))
