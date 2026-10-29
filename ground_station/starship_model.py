@@ -26,10 +26,10 @@ SPLIT_Y = 0.5 - SHIP_LENGTH  # where the ship's bottom meets the booster, in mod
 BODY_RADIUS = 0.034  # the ship is about 5.9 diameters long, as measured on the picture of it
 DIAMETER = 2 * BODY_RADIUS
 NOSE_SHARE = 0.27  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
-NOSE_BLACK_SHARE = 0.97  # of the nose is black tile all the way round, even on the steel side
+NOSE_BLACK_SHARE = 0.50  # of the nose is black tile all the way round, even on the steel side
 HOT_STAGE_HEIGHT = 0.022
 SKIRT_TOP = -0.47  # the engine skirt runs from here down to the bells at -0.5
-SEGMENTS = 28  # round the axis: enough that the silhouette is smooth at the dial's size
+SEGMENTS = 24  # round the axis: enough that the silhouette is smooth at the dial's size
 
 # Colours follow the SpaceX overlay's dial icon: a bright white booster under a dark ship.
 STEEL = np.array([0.66, 0.68, 0.72])  # the booster: the same greyish stainless as the ship
@@ -42,6 +42,7 @@ ENGINES = np.array([0.20, 0.20, 0.23])
 BELL = np.array([0.09, 0.09, 0.11])  # the inside of an engine bell, seen from below
 FIN = np.array([0.72, 0.73, 0.77])
 FIN_HOLE = np.array([0.30, 0.31, 0.36])  # the gaps in a grid fin's lattice
+FLAP_STEEL = np.array([0.74, 0.76, 0.80])  # the face of a flap on the steel side of the ship: bare steel panels
 FLAP = np.array([0.18, 0.19, 0.22])  # the flaps are covered by the heat shield too: black tile like the shield side
 
 GLOSS_STEEL = 0.75
@@ -182,8 +183,11 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         for k in range(1, len(points) - 1):
             add_face((base, base + k, base + k + 1), colour, shine, False)
 
-    def slab(corner_rows: list[list[tuple[float, float, float]]], colour: np.ndarray, shine: float) -> None:
-        """A thin slab given as its upper and lower outlines: both faces and the rim."""
+    def slab(
+        corner_rows: list[list[tuple[float, float, float]]], colour: np.ndarray, shine: float,
+        upper_colour: np.ndarray | None = None, lower_colour: np.ndarray | None = None,
+    ) -> None:
+        """A thin slab given as its upper and lower outlines: both faces (each its own colour if asked) and the rim."""
         upper, lower = corner_rows
         start = len(vertices)
         for point in upper + lower:
@@ -191,16 +195,17 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
             normals.append((0.0, 0.0, 0.0))
         count = len(upper)
         for k in range(1, count - 1):
-            add_face((start, start + k, start + k + 1), colour, shine, False)
-            add_face((start + count, start + count + k, start + count + k + 1), colour, shine, False)
+            add_face((start, start + k, start + k + 1), colour if upper_colour is None else upper_colour, shine, False)
+            add_face((start + count, start + count + k, start + count + k + 1), colour if lower_colour is None else lower_colour, shine, False)
         for k in range(count):
             a, b = start + k, start + (k + 1) % count
             c, d = start + count + k, start + count + (k + 1) % count
             add_face((a, c, b), colour, shine, False)
             add_face((b, c, d), colour, shine, False)
 
-    def flap(angle: float, outline: list[tuple[float, float]], thickness: float) -> None:
-        """A flap: a slab sticking out of the ship at this angle round its axis. `outline` is (out from the body, height)."""
+    def flap(angle: float, outline: list[tuple[float, float]], thickness: float, steel_up: bool) -> None:
+        """A flap: a slab sticking out of the ship at this angle round its axis. `outline` is (out from the body, height). One face
+        is black tile (the one toward the heat shield) and the other bare steel; `steel_up` says which of the two is which."""
         direction = np.array([np.cos(angle), np.sin(angle)])
         sideways = np.array([-direction[1], direction[0]])
         rows = []
@@ -211,7 +216,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
                 x, z = direction * (root if out == 0.0 else BODY_RADIUS * 0.96 + out) + sideways * level
                 row.append((x, height, z))
             rows.append(row)
-        slab(rows, FLAP, GLOSS_FLAP)
+        slab(rows, FLAP, GLOSS_FLAP, FLAP_STEEL if steel_up else FLAP, FLAP if steel_up else FLAP_STEEL)
 
     def grid_fin(angle: float, height: float) -> None:
         """A grid fin: a flat lattice sticking out sideways from the booster, bars with dark gaps between them."""
@@ -240,7 +245,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
 
     belts = [(ship_height(a), ship_height(b)) for a, b in SHIP_BELTS]  # (top, bottom) heights
     ship_rings: list[tuple[float, float]] = [(0.5, 0.0)]
-    dome_steps = [DOME_SHARE * (step / 12) ** 1.3 for step in range(1, 13)]  # more rings near the tip, where it curves most
+    dome_steps = [DOME_SHARE * (step / 15) ** 1.12 for step in range(1, 16)]  # a few more rings near the tip, where it curves most; plenty lower down so the shield's edge is smooth
     for s in dome_steps + ([] if DOME_SHARE >= 1.0 else [DOME_SHARE + (1.0 - DOME_SHARE) * 0.5, 1.0]):
         ship_rings.append((0.5 - NOSE_SHARE * SHIP_LENGTH * s, _nose_radius(s)))
     edges = {SPLIT_Y}
@@ -364,8 +369,8 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
     # seen from above (the nose pointing at you, the heat shield below): the forward flaps lean back toward the steel
     # side, the aft flaps stick out straight to each side
     for mirror in (1, -1):
-        flap(TILE_CENTRE + mirror * (np.pi / 2 + FORWARD_FLAP_LEAN), forward, FORWARD_FLAP_THICKNESS)
-        flap(TILE_CENTRE + mirror * (np.pi / 2 - AFT_FLAP_LEAN), aft, AFT_FLAP_THICKNESS)
+        flap(TILE_CENTRE + mirror * (np.pi / 2 + FORWARD_FLAP_LEAN), forward, FORWARD_FLAP_THICKNESS, mirror == 1)
+        flap(TILE_CENTRE + mirror * (np.pi / 2 - AFT_FLAP_LEAN), aft, AFT_FLAP_THICKNESS, mirror == 1)
 
     return Mesh(
         np.asarray(vertices, dtype=np.float32),
