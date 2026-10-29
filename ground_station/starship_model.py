@@ -358,8 +358,8 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
     aft = [  # measured on the picture: a long slanted top edge, a straight outer edge down almost to the bottom
         (0.0, ship_height(0.830)),
         (0.42 * DIAMETER, ship_height(0.885)),
-        (0.42 * DIAMETER, ship_height(0.979)),
-        (0.0, ship_height(0.985)),
+        (0.42 * DIAMETER, ship_height(1.0)),
+        (0.0, ship_height(1.0)),
     ]
     # seen from above (the nose pointing at you, the heat shield below): the forward flaps lean back toward the steel
     # side, the aft flaps stick out straight to each side
