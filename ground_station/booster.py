@@ -17,7 +17,7 @@ READ_EVERY_SECONDS = 0.25  # asking for readings one by one (no stream): this of
 PARTS_EVERY_SECONDS = 1.0  # whether the booster still has readable parts is looked at this often
 HISTORY_EVERY_SECONDS = 0.25
 LOST_AFTER_SECONDS = 3.0  # readings that fail this long mean the booster is gone
-NO_DATA_SECONDS = 10.0  # once the booster has no readable parts (it has been unloaded) its gauges say NO DATA this long
+NO_DATA_SECONDS = 5.0  # once the booster has no readable parts (it has been unloaded) its gauges say NO DATA this long
 LOG_SECONDS = 20.0  # what the last readings were, kept for the record written when the booster is lost
 
 
