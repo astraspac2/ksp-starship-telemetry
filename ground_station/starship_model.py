@@ -58,8 +58,8 @@ TILE_CENTRE = np.radians(270)  # the side of the ship the heat shield is on, as 
 
 FORWARD_FLAP_LEAN = np.radians(22)  # how far the forward flaps lean back from straight out sideways
 AFT_FLAP_LEAN = 0.0  # the aft flaps stick out straight to each side, neither toward the heat shield nor away from it
-FORWARD_FLAP_THICKNESS = 0.012
-AFT_FLAP_THICKNESS = 0.016
+FORWARD_FLAP_THICKNESS = 0.0045
+AFT_FLAP_THICKNESS = 0.0055
 
 SHIP_BELTS = ((0.328, 0.338), (0.581, 0.589), (0.865, 0.873))  # (from, to) as fractions of the ship's length from its tip, measured on the picture
 SHIP_BELT = np.array([0.38, 0.39, 0.43])  # the dark seams round the ship
@@ -77,7 +77,7 @@ BOOSTER_BELT = (0.345, 0.375)  # as fractions of the booster's length from its t
 BELL_RADIUS = 0.0033  # one engine bell on the booster's bottom
 
 
-DOME_SHARE = 0.8  # of the nose's length: the rounded dome reaches full width this far down, the rest is black barrel
+DOME_SHARE = 1.0  # of the nose's length: the rounded dome reaches full width this far down, the rest is black barrel
 
 
 def _nose_radius(s: float) -> float:
@@ -85,7 +85,7 @@ def _nose_radius(s: float) -> float:
     a diameter long (the picture of the real nose: more than half the width already a tenth of the way down), reaching the barrel's
     width tangentially and carrying on as barrel."""
     u = min(max(s / DOME_SHARE, 0.0), 1.0)
-    return BODY_RADIUS * float(np.sin(0.5 * np.pi * u ** 0.52))
+    return BODY_RADIUS * float(np.sin(0.5 * np.pi * u ** 0.65))
 
 
 def _body_radius(height: float) -> float:
@@ -241,7 +241,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
     belts = [(ship_height(a), ship_height(b)) for a, b in SHIP_BELTS]  # (top, bottom) heights
     ship_rings: list[tuple[float, float]] = [(0.5, 0.0)]
     dome_steps = [DOME_SHARE * (step / 12) ** 1.3 for step in range(1, 13)]  # more rings near the tip, where it curves most
-    for s in dome_steps + [DOME_SHARE + (1.0 - DOME_SHARE) * 0.5, 1.0]:
+    for s in dome_steps + ([] if DOME_SHARE >= 1.0 else [DOME_SHARE + (1.0 - DOME_SHARE) * 0.5, 1.0]):
         ship_rings.append((0.5 - NOSE_SHARE * SHIP_LENGTH * s, _nose_radius(s)))
     edges = {SPLIT_Y}
     for top, bottom in belts:
