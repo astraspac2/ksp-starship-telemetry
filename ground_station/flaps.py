@@ -44,7 +44,9 @@ def _flag(text) -> bool:
     return str(text).strip().lower() in ("true", "active", "yes", "1")
 
 
-def fold_degrees(fields: dict, forward: bool, left: bool, pitch: float, yaw: float, roll: float) -> float:
+def fold_degrees(
+    fields: dict, forward: bool, left: bool, pitch: float, yaw: float, roll: float, use_yaw: bool = True, use_roll: bool = True
+) -> float:
     """How far one flap is swung from the pose the model is drawn in, from its module's fields and the stick input (-1..1 each)."""
     deploy_angle = _number(fields.get("Deploy Angle"), 0.0)
     limiter = _number(fields.get("Authority Limiter"), 0.0)
@@ -52,9 +54,9 @@ def fold_degrees(fields: dict, forward: bool, left: bool, pitch: float, yaw: flo
     stick = 0.0
     if not _flag(fields.get("Pitch")):  # like Deploy, these read False while the flap answers the axis (the part's panel says "Active")
         stick += pitch * PITCH_SIGN_FORWARD * (1.0 if forward else -1.0)
-    if not _flag(fields.get("Roll")):
+    if use_roll and not _flag(fields.get("Roll")):
         stick += roll * ROLL_SIGN_LEFT * (1.0 if left else -1.0)
-    if not _flag(fields.get("Yaw")):
+    if use_yaw and not _flag(fields.get("Yaw")):
         stick += yaw * YAW_SIGN * (1.0 if forward else -1.0) * (1.0 if left else -1.0)
     stick = max(-1.0, min(1.0, stick)) if retracted else 0.0  # the stick moves a flap only while Deploy is True (recorded: the real flaps follow it then, and sit still with Deploy False)
     fold = (deploy_angle if retracted else 0.0) - limiter * stick
@@ -76,6 +78,7 @@ class FlapTracker:
         self._log_path = log_path
         self._logged = 0
         self._last_logged = None
+        self._axes = (True, True)
         self.reset()
 
     def reset(self) -> None:
@@ -85,10 +88,13 @@ class FlapTracker:
         self._read_at: float | None = None
         self._folds: tuple[float, ...] | None = None
 
-    def update(self, now: float, conn) -> tuple[float, ...] | None:
-        """The four folds in FLAP_ORDER, or None when the flown vessel does not have the four flaps (or the game will not say)."""
-        if self._read_at is not None and now - self._read_at < READ_EVERY_SECONDS:
+    def update(self, now: float, conn, use_roll: bool = True, use_yaw: bool = True) -> tuple[float, ...] | None:
+        """The four folds in FLAPS order, or None when the flown vessel does not have the four flaps (or the game will not say).
+        `use_roll` and `use_yaw` say whether those inputs bend the flaps (deploy, retract and pitch always do)."""
+        axes = (use_roll, use_yaw)
+        if self._read_at is not None and now - self._read_at < READ_EVERY_SECONDS and axes == self._axes:
             return self._folds
+        self._axes = axes
         self._read_at = now
         try:
             if self._modules is None:
@@ -103,7 +109,7 @@ class FlapTracker:
             pitch, yaw, roll = control.pitch, control.yaw, control.roll
             read = [dict(module.fields) for module in self._modules]
             self._folds = tuple(
-                fold_degrees(fields, forward, left, pitch, yaw, roll) for fields, (_, forward, left) in zip(read, FLAPS)
+                fold_degrees(fields, forward, left, pitch, yaw, roll, use_yaw, use_roll) for fields, (_, forward, left) in zip(read, FLAPS)
             )
             self._log(now, read, (pitch, yaw, roll))
         except Exception as exc:  # the vessel changed or the game is busy: look again shortly

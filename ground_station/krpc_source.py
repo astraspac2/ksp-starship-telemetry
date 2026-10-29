@@ -405,6 +405,8 @@ class KrpcReader:
         self._sample: LiveSample | None = None
         self._error: str | None = None
         self._server_version: str | None = None
+        self.flap_roll = True  # whether the ship's flaps in the dial follow the roll and yaw input; may change while running
+        self.flap_yaw = True
         self.altitude_mode = "surface"  # "surface" (above ground/sea) or "sea" (above sea level); may change while running
         self._rated_memory: dict[str, float] = {}
         self._booster = BoosterTracker(booster_log)
@@ -501,7 +503,7 @@ class KrpcReader:
             booster = self._booster.update(now, conn.space_center, bool(streams.sep), self.altitude_mode, conn)
             if booster.live:
                 sample = replace(sample, booster_speed_ms=booster.speed_ms, booster_altitude_m=booster.altitude_m, booster_live=True)
-            folds = self._flaps.update(now, conn)
+            folds = self._flaps.update(now, conn, self.flap_roll, self.flap_yaw)
             if folds is not None:
                 sample = replace(sample, flap_folds_deg=folds)
             with self._lock:

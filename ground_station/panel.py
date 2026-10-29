@@ -505,6 +505,14 @@ class ControlPanel(QMainWindow):
         self._ship_scale.setToolTip("How big the rocket is in the 3D dial once the booster has separated and only the ship is left. 1.00 is the normal size.")
         self._ship_scale.valueChanged.connect(self._store_hud)
         form.addRow("Ship size in the dial (after separation)", self._ship_scale)
+        self._flap_roll = QCheckBox("Ship flaps in the dial follow roll")
+        self._flap_roll.setToolTip("Turn off to keep the dial's flaps still when you roll. Deploy, retract and pitch still show.")
+        self._flap_roll.toggled.connect(self._store_hud)
+        form.addRow(self._flap_roll)
+        self._flap_yaw = QCheckBox("Ship flaps in the dial follow yaw")
+        self._flap_yaw.setToolTip("Turn off to keep the dial's flaps still when you yaw. Deploy, retract and pitch still show.")
+        self._flap_yaw.toggled.connect(self._store_hud)
+        form.addRow(self._flap_yaw)
 
         self._font = QComboBox()
         self._font.addItem(AUTOMATIC_FONT)
@@ -833,6 +841,8 @@ class ControlPanel(QMainWindow):
         self._refresh_rate.setCurrentIndex(REFRESH_HZ.index(s.refresh_hz))
         self._scale.setValue(s.hud_scale)
         self._ship_scale.setValue(s.ship_scale)
+        self._flap_roll.setChecked(s.flap_roll)
+        self._flap_yaw.setChecked(s.flap_yaw)
         font_index = self._font.findText(s.font) if s.font else 0
         self._font.setCurrentIndex(max(font_index, 0))
         self._background.setCurrentIndex(BACKGROUNDS.index(s.background))
@@ -962,6 +972,7 @@ class ControlPanel(QMainWindow):
         s.refresh_hz = REFRESH_HZ[self._refresh_rate.currentIndex()]
         s.hud_scale = round(self._scale.value(), 2)
         s.ship_scale = round(self._ship_scale.value(), 2)
+        self._session.set_flap_axes(self._flap_roll.isChecked(), self._flap_yaw.isChecked())
         s.font = "" if self._font.currentIndex() == 0 else self._font.currentText()
         s.background = BACKGROUNDS[self._background.currentIndex()]
         s.on_top = self._on_top.isChecked()

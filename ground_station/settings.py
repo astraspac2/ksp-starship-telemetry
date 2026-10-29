@@ -54,6 +54,8 @@ class Settings:
     accent: str = ""  # "" = the look's own accent, else "#RRGGBB"
     panel_opacity: float | None = None  # None = the look's own; else 0..1 for the plates behind the gauges
     hud_scale: float = 1.0
+    flap_roll: bool = True  # the ship's flaps in the 3D dial follow the roll input
+    flap_yaw: bool = True  # and the yaw input (deploy, retract and pitch always show)
     ship_scale: float = 1.0  # the 3D dial's rocket size once only the ship is left, as a multiple of its normal size
     font: str = ""  # "" = automatic (bundled Oxanium, then D-DIN)
     background: str = "transparent"
@@ -126,7 +128,7 @@ class Settings:
         within("panel_image_dim", 0, 90)
         for name in ("address", "subtitle", "pad_subtitle", "font", "vessel_model", "accent", "background_color", "panel_image"):
             text(name)
-        for name in ("auto_connect", "show_pill", "show_bar", "on_top", "click_through", "show_badge", "show_map", "show_timeline", "vessel_model_flip", "starship_model"):
+        for name in ("auto_connect", "show_pill", "show_bar", "on_top", "click_through", "show_badge", "show_map", "show_timeline", "vessel_model_flip", "starship_model", "flap_roll", "flap_yaw"):
             flag(name)
         if not fixed.address.strip():
             fixed.address = defaults.address

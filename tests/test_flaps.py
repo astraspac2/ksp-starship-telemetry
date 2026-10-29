@@ -283,3 +283,35 @@ def test_each_flap_follows_its_own_deploy_angle_as_it_changes():
     set_angles(45, 30)  # the angles change in flight
     folds = tracker.update(1.0, conn_with(vessel))
     assert folds == pytest.approx((45 * FORWARD_FOLD_SCALE, 45 * FORWARD_FOLD_SCALE, 30 * AFT_FOLD_SCALE, 30 * AFT_FOLD_SCALE))
+
+
+def test_roll_and_yaw_can_be_left_out_while_deploy_and_pitch_still_show():
+    active = {**RETRACTED, "Pitch": "False", "Yaw": "False", "Roll": "False"}
+    args = (False, True, 0.1, 0.2, 0.3)  # small inputs, so the stick does not saturate
+    full = fold_degrees(active, *args)
+    assert fold_degrees(active, *args, use_yaw=False, use_roll=False) == pytest.approx(fold_degrees(active, False, True, 0.1, 0, 0))
+    assert fold_degrees(active, *args, use_yaw=False) != pytest.approx(full)
+    assert fold_degrees(active, *args, use_roll=False) != pytest.approx(full)
+    assert fold_degrees(RETRACTED, False, True, 0, 0, 0, use_yaw=False, use_roll=False) == pytest.approx(47.0)  # retract still shows
+
+
+def test_the_tracker_obeys_a_changed_toggle_at_once():
+    vessel = FakeVessel({**RETRACTED, "Roll": "False"})
+    vessel.control.roll = 1.0
+    tracker = FlapTracker()
+    with_roll = tracker.update(0.0, conn_with(vessel), use_roll=True)
+    without = tracker.update(0.05, conn_with(vessel), use_roll=False)  # well inside the read interval, but the toggle changed
+    assert with_roll != without
+
+
+def test_the_session_hands_the_toggles_to_the_reader_and_keeps_them_in_the_settings():
+    from ground_station.session import Session
+    from ground_station.settings import Settings
+
+    settings = Settings()
+    assert settings.flap_roll is True and settings.flap_yaw is True  # on unless turned off
+    session = Session(settings)
+    session._reader = SimpleNamespace(flap_roll=True, flap_yaw=True)
+    session.set_flap_axes(False, True)
+    assert (settings.flap_roll, settings.flap_yaw) == (False, True)
+    assert (session._reader.flap_roll, session._reader.flap_yaw) == (False, True)

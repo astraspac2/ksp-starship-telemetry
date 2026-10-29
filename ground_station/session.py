@@ -114,6 +114,7 @@ class Session:
         extra = {} if self._booster_log is None else {"booster_log": self._booster_log}
         self._reader = self._reader_factory(s.address.strip(), s.rpc_port, s.stream_port, **extra)
         self._reader.altitude_mode = s.altitude_mode
+        self._reader.flap_roll, self._reader.flap_yaw = s.flap_roll, s.flap_yaw
         self._reader.start()
 
     def connect_on_start(self) -> None:
@@ -135,6 +136,12 @@ class Session:
         self.settings.altitude_mode = mode
         if self._reader is not None:
             self._reader.altitude_mode = mode
+
+    def set_flap_axes(self, roll: bool, yaw: bool) -> None:
+        """Whether the ship's flaps in the 3D dial follow the roll and the yaw input."""
+        self.settings.flap_roll, self.settings.flap_yaw = roll, yaw
+        if self._reader is not None:
+            self._reader.flap_roll, self._reader.flap_yaw = roll, yaw
 
     def reader_status(self) -> ReaderStatus:
         return self._reader.snapshot() if self._reader is not None else NOT_CONNECTED
