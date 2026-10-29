@@ -25,8 +25,8 @@ SHIP_LENGTH = 0.40  # a little over a third of the stack, so the booster is the 
 SPLIT_Y = 0.5 - SHIP_LENGTH  # where the ship's bottom meets the booster, in model height
 BODY_RADIUS = 0.034  # the ship is about 5.9 diameters long, as measured on the picture of it
 DIAMETER = 2 * BODY_RADIUS
-NOSE_SHARE = 0.27  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
-NOSE_BLACK_SHARE = 0.50  # of the nose is black tile all the way round, even on the steel side
+NOSE_SHARE = 0.14  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
+NOSE_BLACK_SHARE = 1.0  # of the nose is black tile all the way round, even on the steel side
 HOT_STAGE_HEIGHT = 0.022
 SKIRT_TOP = -0.47  # the engine skirt runs from here down to the bells at -0.5
 SEGMENTS = 24  # round the axis: enough that the silhouette is smooth at the dial's size
@@ -78,6 +78,8 @@ BOOSTER_BELT = (0.345, 0.375)  # as fractions of the booster's length from its t
 BELL_RADIUS = 0.0033  # one engine bell on the booster's bottom
 
 
+COLLAR_HEIGHT = 0.011  # the dark band where the nose's black cap ends, a little wider than the barrel
+COLLAR_BULGE = 1.045
 DOME_SHARE = 1.0  # of the nose's length: the rounded dome reaches full width this far down, the rest is black barrel
 
 
@@ -98,12 +100,10 @@ def _body_radius(height: float) -> float:
 
 
 def _tile_reach(height: float) -> float:
-    """How far round from the heat shield's centre line the black tiles reach at this height: about half way on the barrel, then
-    opening up over the nose until they cover it all the way round, so the steel side ends in a rounded point (the pictures)."""
+    """How far round from the heat shield's centre line the black tiles reach at this height: about half way on the barrel, and all the
+    way round over the whole nose, which ends in a clean ring (the picture of the nose)."""
     barrel_top = 0.5 - NOSE_SHARE * SHIP_LENGTH
-    black_bottom = 0.5 - NOSE_SHARE * SHIP_LENGTH * NOSE_BLACK_SHARE
-    t = min(max((height - barrel_top) / (black_bottom - barrel_top), 0.0), 1.0)
-    return TILE_HALF_ANGLE + (np.pi - TILE_HALF_ANGLE) * t * t * (3.0 - 2.0 * t)
+    return np.pi if height > barrel_top - 1e-9 else TILE_HALF_ANGLE
 
 
 def _engine_layout() -> list[tuple[float, float]]:
@@ -137,7 +137,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
             (h0, r0), (h1, r1) = rings[r], rings[r + 1]
             mean0 = float(np.mean(r0)) if isinstance(r0, (list, tuple, np.ndarray)) else r0
             mean1 = float(np.mean(r1)) if isinstance(r1, (list, tuple, np.ndarray)) else r1
-            slopes.append(None if h0 - h1 < 1e-6 else (mean1 - mean0) / (h0 - h1))
+            slopes.append(None if h0 - h1 < 5e-4 else (mean1 - mean0) / (h0 - h1))
         for index, (height, radius) in enumerate(rings):
             starts.append(len(vertices))
             around = [s for s in (slopes[index - 1] if index > 0 else None, slopes[index] if index < len(slopes) else None) if s is not None]
@@ -150,7 +150,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
                 n /= np.linalg.norm(n)
                 normals.append((n[0], n[1], n[2]))
         for r in range(len(rings) - 1):
-            step = rings[r][0] - rings[r + 1][0] < 1e-6
+            step = rings[r][0] - rings[r + 1][0] < 5e-4
             for k in range(segments):
                 a, b = starts[r] + k, starts[r] + (k + 1) % segments
                 c, d = starts[r + 1] + k, starts[r + 1] + (k + 1) % segments
@@ -245,7 +245,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
 
     belts = [(ship_height(a), ship_height(b)) for a, b in SHIP_BELTS]  # (top, bottom) heights
     ship_rings: list[tuple[float, float]] = [(0.5, 0.0)]
-    dome_steps = [DOME_SHARE * (step / 15) ** 1.12 for step in range(1, 16)]  # a few more rings near the tip, where it curves most; plenty lower down so the shield's edge is smooth
+    dome_steps = [DOME_SHARE * (step / 12) ** 1.12 for step in range(1, 13)]  # a few more rings near the tip, where it curves most; plenty lower down so the shield's edge is smooth
     for s in dome_steps + ([] if DOME_SHARE >= 1.0 else [DOME_SHARE + (1.0 - DOME_SHARE) * 0.5, 1.0]):
         ship_rings.append((0.5 - NOSE_SHARE * SHIP_LENGTH * s, _nose_radius(s)))
     edges = {SPLIT_Y}
@@ -253,7 +253,12 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         edges.update((top, bottom))
     bands = 7
     edges.update(barrel_top + (SPLIT_Y - barrel_top) * i / bands for i in range(1, bands))
-    for height in sorted((h for h in edges if h < barrel_top - 1e-9), reverse=True):
+    collar = (barrel_top, barrel_top - COLLAR_HEIGHT)  # the dark raised band round the foot of the nose
+    ship_rings.append((barrel_top, BODY_RADIUS * 1.0))
+    ship_rings.append((barrel_top - 1e-4, BODY_RADIUS * COLLAR_BULGE))
+    ship_rings.append((collar[1], BODY_RADIUS * COLLAR_BULGE))
+    ship_rings.append((collar[1] - 1e-4, BODY_RADIUS))
+    for height in sorted((h for h in edges if h < collar[1] - 1e-3), reverse=True):
         ship_rings.append((height, BODY_RADIUS))
 
     nose_black_bottom = 0.5 - NOSE_SHARE * SHIP_LENGTH * NOSE_BLACK_SHARE
@@ -261,6 +266,8 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
 
     def ship_colour(upper: float, lower: float, k: int, band: int) -> tuple[np.ndarray, float]:
         middle = (upper + lower) / 2
+        if collar[1] - 3e-4 <= middle <= collar[0]:  # the raised dark band at the foot of the nose
+            return TILE * 0.85, GLOSS_TILE
         if middle > nose_black_bottom:  # the tip of the nose is black tile all the way round
             return TILE * (1.0 + 0.04 * (((k + band % 2) % 2) - 0.5)), GLOSS_TILE
         if middle > barrel_top:  # the steel part of the nose: shinier lower down, matt up by the black tip, so no bright crescent shows there
