@@ -25,7 +25,7 @@ SHIP_LENGTH = 0.44
 SPLIT_Y = 0.5 - SHIP_LENGTH  # where the ship's bottom meets the booster, in model height
 BODY_RADIUS = 0.037  # the ship is 6 diameters long, as measured on the picture of it
 DIAMETER = 2 * BODY_RADIUS
-NOSE_SHARE = 0.16  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
+NOSE_SHARE = 0.175  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
 NOSE_BLACK_SHARE = 0.63  # of the nose is black tile all the way round, even on the steel side
 HOT_STAGE_HEIGHT = 0.022
 SKIRT_TOP = -0.47  # the engine skirt runs from here down to the bells at -0.5
@@ -69,14 +69,19 @@ RACEWAY_FROM, RACEWAY_TO = 0.35, 0.95  # as fractions of the ship's length from 
 WINDOWS_FROM, WINDOWS_TO = 0.200, 0.235  # the band with the two dark hatches and the logo between them, as fractions from the tip
 HATCH_OFFSET = np.radians(32)  # how far either side of the steel side's centre line a hatch sits
 HATCH = np.array([0.13, 0.13, 0.16])
+HATCH_RIM = np.array([0.40, 0.41, 0.45])
+LOGO = np.array([0.08, 0.08, 0.10])  # the black X between the hatches
+HATCH_SIZE = (0.0120, 0.0085)  # round the ship, along it
+LOGO_HEIGHT = 0.0125
 BOOSTER_BELT = (0.345, 0.375)  # as fractions of the booster's length from its top
 BELL_RADIUS = 0.0036  # one engine bell on the booster's bottom
 
 
 def _nose_radius(s: float) -> float:
-    """The nose: radius at fraction s (0 at the tip, 1 where the nose meets the barrel). Measured on the picture of the ship:
-    a blunt, rounded tip (already a quarter of the full width a few pixels down), then an almost straight cone."""
-    return BODY_RADIUS * max(s, 0.0) ** 0.6
+    """The nose: radius at fraction s (0 at the tip, 1 where the nose meets the barrel). A rounded cone that meets the barrel
+    tangentially, so there is no crease where the nose starts; measured on the picture of the ship (about a quarter of the full
+    width a quarter of the way down)."""
+    return BODY_RADIUS * float(np.sin(0.5 * np.pi * min(max(s, 0.0), 1.0) ** 0.95))
 
 
 def _body_radius(height: float) -> float:
@@ -222,10 +227,10 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
 
     belts = [(ship_height(a), ship_height(b)) for a, b in SHIP_BELTS]  # (top, bottom) heights
     ship_rings: list[tuple[float, float]] = [(0.5, 0.0)]
-    for step in range(1, 13):
-        s = step / 12
+    for step in range(1, 15):
+        s = step / 14
         ship_rings.append((0.5 - NOSE_SHARE * SHIP_LENGTH * s, _nose_radius(s)))
-    edges = {SPLIT_Y, ship_height(WINDOWS_FROM), ship_height(WINDOWS_TO)}
+    edges = {SPLIT_Y}
     for top, bottom in belts:
         edges.update((top, bottom))
     bands = 7
@@ -240,23 +245,45 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         middle = (upper + lower) / 2
         if middle > nose_black_bottom:  # the tip of the nose is black tile all the way round
             return TILE * (1.0 + 0.04 * (((k + band % 2) % 2) - 0.5)), GLOSS_TILE
-        if middle > barrel_top:  # the steel part of the nose: matt, so it does not flash a bright crescent under the black tip
-            return SHIP_STEEL, 0.25
+        if middle > barrel_top:  # the steel part of the nose: shinier lower down, matt up by the black tip, so no bright crescent shows there
+            fade = (middle - barrel_top) / max(nose_black_bottom - barrel_top, 1e-9)
+            return SHIP_STEEL, GLOSS_STEEL - (GLOSS_STEEL - 0.25) * min(max(fade, 0.0), 1.0)
         if any(bottom <= middle <= top for top, bottom in belts):
             return SHIP_BELT, GLOSS_STEEL
         side = abs((2 * np.pi * (k + 0.5) / segments - steel_centre + np.pi) % (2 * np.pi) - np.pi)  # how far round from the steel side's centre line
         if abs(side - RACEWAY_OFFSET) < np.radians(3) and ship_height(RACEWAY_TO) <= middle <= ship_height(RACEWAY_FROM):
             return RACEWAY, 0.5
-        if ship_height(WINDOWS_TO) <= middle <= ship_height(WINDOWS_FROM):
-            if abs(side - HATCH_OFFSET) < np.radians(3):  # the two dark hatches
-                return HATCH, 0.3
-            if side < np.radians(8):  # and the logo between them
-                return HATCH * 1.8, 0.2
         # stainless panels: alternate bands a touch light and dark, and a faint seam every few segments
         return SHIP_STEEL * (1.0 + 0.012 * ((k + band) % 2 - 0.5) * 2 + (0.012 if band % 2 else -0.012)) * (0.985 if k % 7 == 0 else 1.0), GLOSS_STEEL
 
     ship_first = tube(ship_rings, ship_colour, tiles=True)
     cap(SPLIT_Y + 0.001, ship_first + (len(ship_rings) - 1) * segments, ENGINES)  # the ship's bottom, so it is not hollow once it is free
+
+
+    def decal(points: list[tuple[float, float]], height: float, colour: np.ndarray, lift: float) -> None:
+        """A flat shape on the ship's steel side: (u, v) is how far round the ship from the steel side's centre line, and up it."""
+        corners = []
+        for u, v in points:
+            angle = steel_centre + u / BODY_RADIUS
+            corners.append(((BODY_RADIUS + lift) * np.cos(angle), height + v, (BODY_RADIUS + lift) * np.sin(angle)))
+        flat(corners, colour, 0.0)
+
+    def rounded(width: float, depth: float, corner: float) -> list[tuple[float, float]]:
+        pts = []
+        for cx, cy, a0 in ((1, 1, 0), (-1, 1, 90), (-1, -1, 180), (1, -1, 270)):
+            for step in range(4):
+                a = np.radians(a0 + 90 * step / 3)
+                pts.append((cx * (width / 2 - corner) + corner * np.cos(a), cy * (depth / 2 - corner) + corner * np.sin(a)))
+        return pts
+
+    window_height = ship_height((WINDOWS_FROM + WINDOWS_TO) / 2)
+    for side in (-1, 1):  # the two hatches, a rim and a dark centre
+        u = side * HATCH_OFFSET * BODY_RADIUS
+        decal([(u + x, y) for x, y in rounded(HATCH_SIZE[0] * 1.14, HATCH_SIZE[1] * 1.18, 0.0020)], window_height, HATCH_RIM, 0.0016)
+        decal([(u + x, y) for x, y in rounded(*HATCH_SIZE, 0.0018)], window_height, HATCH, 0.0020)
+    h = LOGO_HEIGHT / 2  # the logo: a long thin curved stroke crossed by a short bar
+    decal([(-0.0030, -h), (-0.0014, -h), (0.0042, h * 0.94), (0.0034, h)], window_height, LOGO, 0.0023)
+    decal([(-0.0046, -0.0006), (0.0034, 0.0012), (0.0036, 0.0001), (-0.0044, -0.0018)], window_height, LOGO, 0.0023)
 
     # the booster: slotted hot-stage ring, barrel in bands with a dark belt, then the engine skirt and its bells
     ring_bottom = SPLIT_Y - HOT_STAGE_HEIGHT

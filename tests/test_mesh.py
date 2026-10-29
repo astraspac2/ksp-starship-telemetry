@@ -204,7 +204,7 @@ def test_starship_stack_is_ready_to_draw_and_split_where_the_ship_meets_the_boos
 
     mesh = starship_stack()
     assert mesh.vertices.shape[1] == 3 and mesh.faces.max() < len(mesh.vertices) and mesh.faces.min() >= 0
-    assert len(mesh.face_colors) == mesh.triangle_count and mesh.triangle_count < 3000
+    assert len(mesh.face_colors) == mesh.triangle_count and mesh.triangle_count < 3200
     assert mesh.vertices[:, 1].max() == pytest.approx(0.5) and mesh.vertices[:, 1].min() == pytest.approx(-0.5)
     assert mesh.stage_split == pytest.approx(SPLIT_Y) and SPLIT_Y == pytest.approx(0.5 - SHIP_LENGTH)
     assert np.abs(mesh.vertices[:, [0, 2]]).max() < 0.2  # slim, centred on the axis, fins included
