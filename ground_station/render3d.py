@@ -26,6 +26,8 @@ AMBIENT = 0.38
 SOLID_LIFT = 0.40  # closed bodies are lit more evenly than flat faces, so a white booster stays white on its shaded side
 EDGE_DARKENING = 0.65  # how dark the faces of a closed body get at its silhouette, against 1.0 facing the viewer
 LIGHT_VIEW = np.array([-0.45, 0.65, -0.62])  # from the upper left, toward the viewer (view z grows away from it)
+HIGHLIGHT_SHARPNESS = 28.0  # how tight the glint on a shiny face is
+HIGHLIGHT_STRENGTH = 0.55  # and how bright, at full gloss
 
 
 def view_matrix() -> np.ndarray:
@@ -67,10 +69,25 @@ class ModelRenderer:
         self._booster_centre = (-0.5 + split) / 2  # and the same for the booster, when it is the vessel being flown
         self._booster_zoom = SHIP_SHARE_OF_DIAL / (split + 0.5)
         self._solid, self._outward = self._facing_signs(mesh)
+        self._smooth = self._smooth_normals(mesh)  # (M, 3) outward model-space normals of round faces (zero where the face is flat)
+        self._gloss = mesh.face_gloss.astype(np.float64) if mesh.face_gloss is not None else np.zeros(len(mesh.faces))
         self._colours = mesh.face_colors if mesh.face_colors is not None else np.tile(BASE_COLOUR, (len(mesh.faces), 1))
         self.size_px = size_px
         self._cache: dict[tuple[int, int, int, int], QImage] = {}
         self._view = view_matrix()
+
+    @staticmethod
+    def _smooth_normals(mesh: Mesh) -> np.ndarray:
+        """A face's normal from the smooth normals of its three corners, where the mesh has them: round bodies then shade without facets."""
+        count = len(mesh.faces)
+        if mesh.vertex_normals is None:
+            return np.zeros((count, 3))
+        normals = mesh.vertex_normals.astype(np.float64)[mesh.faces].mean(axis=1)
+        if mesh.solid is not None:
+            normals[~mesh.solid] = 0.0  # a flat face keeps its own normal
+        length = np.linalg.norm(normals, axis=1)
+        length[length == 0] = 1.0
+        return normals / length[:, None]
 
     def _facing_signs(self, mesh: Mesh) -> tuple[np.ndarray, np.ndarray]:
         """For the faces of a closed body round the Y axis: +1 or -1 so that the face's winding normal times it points outward.
@@ -151,6 +168,11 @@ class ModelRenderer:
         away = solid & (normal[:, 2] > 0)  # the far side of a closed body: hidden behind the near side
         normal[~solid & (normal[:, 2] > 0)] *= -1  # two-sided: always shade the side facing the viewer
         light = LIGHT_VIEW / np.linalg.norm(LIGHT_VIEW)
+        smooth = self._smooth[keep]
+        rounded = np.abs(smooth).sum(axis=1) > 0
+        if rounded.any():  # round faces: the smooth normal in view space instead of the facet's own
+            in_view = (smooth[rounded] @ axes.T) @ self._view.T
+            normal[rounded] = in_view / np.maximum(np.linalg.norm(in_view, axis=1), 1e-9)[:, None]
         shade = AMBIENT + (1 - AMBIENT) * np.clip(normal @ light, 0.0, 1.0)
         shade = np.where(solid, (SOLID_LIFT + (1 - SOLID_LIFT) * shade) * (EDGE_DARKENING + (1 - EDGE_DARKENING) * np.abs(normal[:, 2])), shade)  # round bodies fall away toward their edges
         depth = -tri[:, :, 2].mean(axis=1)
@@ -167,7 +189,14 @@ class ModelRenderer:
         pixels = np.empty_like(tri[:, :, :2])
         pixels[:, :, 0] = centre + tri[:, :, 0] * scale
         pixels[:, :, 1] = centre - tri[:, :, 1] * scale
-        colours = np.clip(self._colours[keep] * shade[:, None], 0.0, 1.0)
+        lit = self._colours[keep] * shade[:, None]
+        gloss = self._gloss[keep]
+        if gloss.any():  # a glint where a shiny face catches the light, brightest where its normal bisects light and viewer
+            half = light + np.array([0.0, 0.0, -1.0])
+            half /= np.linalg.norm(half)
+            glint = np.clip(normal @ half, 0.0, 1.0) ** HIGHLIGHT_SHARPNESS * gloss * HIGHLIGHT_STRENGTH
+            lit = lit + glint[:, None]
+        colours = np.clip(lit, 0.0, 1.0)
         previous = None
         for index in order:
             r, g, b = colours[index]

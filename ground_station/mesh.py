@@ -27,6 +27,8 @@ class Mesh:
     face_colors: np.ndarray | None = None  # (M, 3) float32 in 0..1, or None for one plain colour
     stage_split: float | None = None  # model height where the ship meets the booster, or None for the default split
     solid: np.ndarray | None = None  # (M,) bool: faces of a closed body round the Y axis, whose far side need not be drawn
+    vertex_normals: np.ndarray | None = None  # (N, 3) float32 outward normals, so a round body shades smoothly instead of in facets
+    face_gloss: np.ndarray | None = None  # (M,) float32 0..1: how shiny each face is (a highlight where it catches the light)
 
     @property
     def triangle_count(self) -> int:
