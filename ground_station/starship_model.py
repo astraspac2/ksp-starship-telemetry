@@ -42,12 +42,12 @@ ENGINES = np.array([0.20, 0.20, 0.23])
 BELL = np.array([0.09, 0.09, 0.11])  # the inside of an engine bell, seen from below
 FIN = np.array([0.72, 0.73, 0.77])
 FIN_HOLE = np.array([0.30, 0.31, 0.36])  # the gaps in a grid fin's lattice
-FLAP = np.array([0.24, 0.25, 0.29])
+FLAP = np.array([0.18, 0.19, 0.22])  # the flaps are covered by the heat shield too: black tile like the shield side
 
 GLOSS_STEEL = 0.75
 GLOSS_BOOSTER = 0.85
 GLOSS_TILE = 0.04
-GLOSS_FLAP = 0.12
+GLOSS_FLAP = 0.04
 
 TILE_HALF_ANGLE = np.radians(94)  # the heat shield: half the circumference in the pictures, a little more so it shows from most angles
 # The heat shield (and with it the flaps' lean and the one grid fin on the shield side) sits on the model's -Z side. The dial turns
