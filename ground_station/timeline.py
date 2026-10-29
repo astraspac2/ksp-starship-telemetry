@@ -33,9 +33,12 @@ def bar_state(t: float) -> Rise:
     return Rise(min(max(progress, 0.0), 1.0), 0.0)
 
 
-def panels_state(t: float) -> Rise:
-    """Gauges, engine cluster and dial: rise from the bottom starting at T-10."""
-    p = min(max((t - PANELS_START) / PANELS_DURATION, 0.0), 1.0)
+def panels_state(t: float, shown: float = 1.0) -> Rise:
+    """Gauges, engine cluster and dial: rise from the bottom starting at T-10.
+
+    `shown` (0..1) is how far the operator's show/hide switch has got: it plays the same rise, forward to bring the panels
+    back and backward to take them away, and the panels are only as far up as both it and the countdown allow."""
+    p = min(max((t - PANELS_START) / PANELS_DURATION, 0.0), min(max(shown, 0.0), 1.0))
     eased = 1.0 - (1.0 - p) ** 3
     return Rise(p, 1.0 - eased)
 

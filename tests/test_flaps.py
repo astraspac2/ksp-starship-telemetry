@@ -315,3 +315,32 @@ def test_the_session_hands_the_toggles_to_the_reader_and_keeps_them_in_the_setti
     session.set_flap_axes(False, True)
     assert (settings.flap_roll, settings.flap_yaw) == (False, True)
     assert (session._reader.flap_roll, session._reader.flap_yaw) == (False, True)
+
+
+def test_the_side_panels_leave_and_return_with_the_animation_of_their_first_rise(qapp, monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr("ground_station.bar.time.monotonic", lambda: clock[0])
+    bar = TelemetryBar()
+    bar.set_telemetry(mock_telemetry(100.0))
+    bar.grab()
+    bar._changed_at -= 10.0
+    shown = bar.grab().toImage()
+    assert bar._panels_progress == 1.0
+    bar.set_show_panels(False)
+    clock[0] += 0.5
+    bar.grab()
+    assert 0.0 < bar._panels_progress < 1.0  # on its way down, at the speed of the first rise (a second in all)
+    for _ in range(8):  # one repaint moves it on by at most a quarter of a second, so a hitch does not make it jump
+        clock[0] += 0.25
+        bar.grab()
+    assert bar._panels_progress == 0.0
+    hidden = bar.grab().toImage()
+    assert hidden != shown
+    bar.set_show_panels(True)
+    clock[0] += 0.5
+    bar.grab()
+    assert 0.0 < bar._panels_progress < 1.0  # and rising again the same way
+    for _ in range(8):
+        clock[0] += 0.25
+        bar.grab()
+    assert bar._panels_progress == 1.0 and bar.grab().toImage() == shown

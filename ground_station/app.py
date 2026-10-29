@@ -101,6 +101,7 @@ class GroundStationApp:
         self.bar.set_background(background)
         self.bar.set_badge(s.show_badge)
         self.bar.set_show_map(s.show_map)
+        self.bar.set_show_panels(s.show_panels)
         self.bar.set_timeline(s.show_timeline, s.timeline_nodes)
         self.bar.set_window_options(s.on_top, s.click_through)
         problem = self.bar.set_vessel_model(s.vessel_model, s.vessel_model_flip, s.starship_model)

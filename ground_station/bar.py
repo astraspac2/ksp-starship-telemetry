@@ -9,7 +9,7 @@ import time
 
 import numpy as np
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QLinearGradient, QPainter, QPainterPath, QPen, QTransform
 
 from .branding import DEFAULT_FLIGHT_LABEL
@@ -27,6 +27,7 @@ from .telemetry import Telemetry
 from .textdraw import draw_text
 from .theme import STARSHIP, Theme
 from .timeline import (
+    PANELS_DURATION,
     Milestone,
     bar_state,
     curve_amount,
@@ -151,6 +152,9 @@ class TelemetryBar(HudWindow):
         self._smoothing = True  # ease the 3D dial and the engine dots between readings (off for exact still frames)
         self._attitude: np.ndarray | None = None  # the orientation the 3D dial is showing, eased toward the real one
         self._attitude_time = 0.0
+        self._show_panels = True
+        self._panels_progress = 1.0  # 1 = the side panels are up, 0 = away; it runs between them at the speed of their rise at the start
+        self._panels_time = time.monotonic()
         self._flap_shown: tuple[float, ...] | None = None  # the folds of the four flaps as drawn, easing toward the game's
         self._flap_time = 0.0
         self._attitude_drawn: tuple[np.ndarray, int, bool, object] | None = None  # orientation, separation step, booster only, picture
@@ -245,6 +249,24 @@ class TelemetryBar(HudWindow):
         self._attitude = None
         self._dot_levels.clear()
         self.update()
+
+    def set_show_panels(self, show: bool) -> None:
+        """Bring the side panels (gauges, engine cluster, dial) back or send them away, with the animation of their first rise, played
+        forward or backward."""
+        if show == self._show_panels:
+            return
+        self._advance_panels()
+        self._show_panels = show
+        self.update()
+
+    def _advance_panels(self) -> bool:
+        """Move the show/hide animation on to now. Returns whether it is still running."""
+        now = time.monotonic()
+        step = min(max(now - self._panels_time, 0.0), 0.25) / PANELS_DURATION
+        self._panels_time = now
+        goal = 1.0 if self._show_panels else 0.0
+        self._panels_progress = min(self._panels_progress + step, goal) if goal > self._panels_progress else max(self._panels_progress - step, goal)
+        return self._panels_progress != goal
 
     def set_show_map(self, show: bool) -> None:
         self._show_map = show
@@ -355,7 +377,10 @@ class TelemetryBar(HudWindow):
             if self._show_badge:
                 self._draw_badge(painter, tel)
 
-        panels = panels_state(tel.t)
+        moving = self._advance_panels()
+        panels = panels_state(tel.t, self._panels_progress)
+        if moving:
+            QTimer.singleShot(16, self.update)  # keep drawing until the panels have settled
         if panels.opacity > 0:
             painter.setOpacity(panels.opacity)
             painter.translate(0, panels.offset * RISE_DISTANCE)
