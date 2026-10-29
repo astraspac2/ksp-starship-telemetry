@@ -113,3 +113,30 @@ def test_the_boosters_model_is_the_booster_alone(qapp):
         return sum(1 for y in range(0, image.height(), 3) for x in range(0, image.width(), 3) if image.pixelColor(x, y).alpha() > 0)
 
     assert 0 < ink(booster) and ink(booster) != ink(stack)
+
+
+def gauge_ink(bar, centre_x):
+    image = bar.grab().toImage()
+    total = 0
+    for y in range(int(GAUGE_Y) - 20, int(GAUGE_Y) + 20):
+        for x in range(int(centre_x) - 50, int(centre_x) + 50):
+            c = image.pixelColor(x, y)
+            total += c.red() + c.green() + c.blue()
+    return total
+
+
+def test_a_booster_that_cannot_be_read_says_no_data_in_both_gauges(qapp):
+    from ground_station.bar import GAUGE_RADIUS
+
+    numbers = staged_bar(True, booster=(1269.0, 26.0))
+    nothing = staged_bar(True)
+    nothing.set_telemetry(dataclasses.replace(nothing._telemetry, booster_speed_kmh=None, booster_altitude_km=None))
+    nothing.grab()
+    nothing._changed_at -= 10.0
+    for centre_x in (ENGINE_CENTER_X, DIAL_CENTER_X):
+        assert gauge_ink(nothing, centre_x) > 0  # words are drawn
+        assert gauge_ink(nothing, centre_x) < gauge_ink(numbers, centre_x)  # smaller than the numbers
+    # and the words stay inside the ring
+    image = nothing.grab().toImage()
+    inside = sum(image.pixelColor(int(ENGINE_CENTER_X) + dx, int(GAUGE_Y)).red() for dx in range(-int(GAUGE_RADIUS * 0.7), int(GAUGE_RADIUS * 0.7)))
+    assert inside > 0

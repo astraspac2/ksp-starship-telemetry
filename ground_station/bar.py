@@ -83,6 +83,8 @@ ATTITUDE_SNAP_COSINE = 0.34  # a turn of more than about 70 degrees (a new vesse
 ATTITUDE_RESET_SECONDS = 0.5  # after a pause this long (the dial was hidden) it starts again from the real attitude
 ATTITUDE_REDRAW_DELTA = 0.0015  # about a tenth of a degree
 DOT_FADE_SECONDS = 0.12  # an engine dot closes about two thirds of the way to lit or dim in this long
+NO_DATA_TEXT = "NO DATA"  # what the booster's gauges say once it cannot be read
+NO_DATA_SCALE = 0.5  # in letters this much of the numbers' size, so the words fit inside the ring
 SIDE_LABEL_Y = GAUGE_Y + 57  # the SUPER HEAVY / STARSHIP names sit in the gap under each pair of gauges
 SEPARATION_ANIMATION_SECONDS = 4.0  # the dial's booster drops away and the ship fills it over this long
 BOOSTER_ENGINES = 33  # the booster's dots, drawn dark once it has separated
@@ -691,12 +693,15 @@ class TelemetryBar(HudWindow):
         elif kind in ("speed", "booster_speed"):
             speed = tel.booster_speed_kmh if kind == "booster_speed" else tel.speed_kmh
             text, label = ("", format_speed(0.0, self._speed_unit)[1]) if speed is None else format_speed(speed, self._speed_unit)
+            lost = kind == "booster_speed" and speed is None  # the booster is no longer readable: say so, small, with no unit
             draw_value_gauge(
-                painter, centre, r, 0.0 if speed is None else speed / SPEED_FULL_SCALE_KMH, "SPEED", no_data if speed is None else text, label, theme,
-                arrangement is Layout.FLIGHT,
+                painter, centre, r, 0.0 if speed is None else speed / SPEED_FULL_SCALE_KMH, "SPEED",
+                NO_DATA_TEXT if lost else no_data if speed is None else text, "" if lost else label, theme,
+                arrangement is Layout.FLIGHT, NO_DATA_SCALE if lost else 1.0,
             )
         elif kind in ("altitude", "booster_altitude"):
             altitude = tel.booster_altitude_km if kind == "booster_altitude" else tel.altitude_km
+            lost = kind == "booster_altitude" and altitude is None
             text, label = (
                 ("", format_altitude(0.0, self._altitude_unit)[1]) if altitude is None else format_altitude(altitude, self._altitude_unit)
             )
@@ -706,10 +711,11 @@ class TelemetryBar(HudWindow):
                 r,
                 0.0 if altitude is None else altitude / ALTITUDE_FULL_SCALE_KM,
                 "ALTITUDE",
-                no_data if altitude is None else text,
-                label,
+                NO_DATA_TEXT if lost else no_data if altitude is None else text,
+                "" if lost else label,
                 theme,
                 arrangement is Layout.FLIGHT,
+                NO_DATA_SCALE if lost else 1.0,
             )
         elif kind == "thrust":
             thrust, full = tel.thrust_n, tel.max_thrust_n

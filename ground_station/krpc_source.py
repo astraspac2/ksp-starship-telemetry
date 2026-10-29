@@ -493,7 +493,7 @@ class KrpcReader:
                     streams.refresh_stage()
             sample = streams.read(now)
             sample = replace(sample, has_booster_cluster=bool(streams.sep))
-            booster = self._booster.update(now, conn.space_center, bool(streams.sep), self.altitude_mode)
+            booster = self._booster.update(now, conn.space_center, bool(streams.sep), self.altitude_mode, conn)
             if booster.live:
                 sample = replace(sample, booster_speed_ms=booster.speed_ms, booster_altitude_m=booster.altitude_m, booster_live=True)
             with self._lock:

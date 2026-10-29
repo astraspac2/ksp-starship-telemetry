@@ -1,31 +1,79 @@
 from types import SimpleNamespace
 
-from ground_station.booster import FIND_SECONDS, LOST_AFTER_SECONDS, READ_EVERY_SECONDS, BoosterTracker
+from ground_station.booster import (
+    FIND_SECONDS,
+    LOST_AFTER_SECONDS,
+    NO_DATA_SECONDS,
+    PARTS_EVERY_SECONDS,
+    READ_EVERY_SECONDS,
+    BoosterTracker,
+)
 from ground_station.layout import Layout, layout_for
+
+
+class FakeFlight:
+    def __init__(self, vessel):
+        self._vessel = vessel
+
+    def _read(self, value):
+        self._vessel.calls += 1
+        if self._vessel.fail:
+            raise RuntimeError("gone")
+        return value
+
+    @property
+    def speed(self):
+        return self._read(self._vessel.speed)
+
+    @property
+    def surface_altitude(self):
+        return self._read(self._vessel.altitude)
+
+    @property
+    def mean_altitude(self):
+        return self._read(self._vessel.sea)
 
 
 class FakeVessel:
     def __init__(self, distance, speed=800.0, altitude=60_000.0, sea=60_500.0):
         self.distance, self.speed, self.altitude, self.sea, self.fail = distance, speed, altitude, sea, False
+        self.unloaded, self.calls, self.parts_calls = False, 0, 0
         self.reference_frame = "frame"
         self.orbit = SimpleNamespace(body=SimpleNamespace(reference_frame="body"))
+        self.situation = SimpleNamespace(name="flying")
 
     def position(self, frame):
         return (self.distance, 0.0, 0.0)
 
     def flight(self, frame=None):
-        if self.fail:
-            raise RuntimeError("gone")
-        return SimpleNamespace(speed=self.speed, surface_altitude=self.altitude, mean_altitude=self.sea)
+        return FakeFlight(self)
+
+    @property
+    def parts(self):
+        self.parts_calls += 1
+        return SimpleNamespace(all=[] if self.unloaded else [0] * 10)
+
+
+class FakeConn:
+    """add_stream hands back a callable that reads the attribute when it is called, as a kRPC stream's latest value does."""
+
+    def __init__(self):
+        self.streams = []
+
+    def add_stream(self, fn, obj, attr):
+        stream = lambda: fn(obj, attr)  # noqa: E731
+        stream.remove = lambda: self.streams.remove(stream)
+        self.streams.append(stream)
+        return stream
 
 
 def centre_with(ship, *others):
     return SimpleNamespace(active_vessel=ship, vessels=[ship, *others])
 
 
-def separated(tracker, centre, now=0.0):
-    tracker.update(now, centre, True)  # the stack, with the booster's cluster
-    return tracker.update(now + 1.0, centre, False)  # now the ship alone
+def separated(tracker, centre, now=0.0, conn=None):
+    tracker.update(now, centre, True, "surface", conn)  # the stack, with the booster's cluster
+    return tracker.update(now + 1.0, centre, False, "surface", conn)  # now the ship alone
 
 
 def test_the_booster_is_found_after_the_separation_and_read():
@@ -60,7 +108,7 @@ def test_sea_level_altitude_when_that_is_the_setting():
     assert tracker.update(1.0, centre, False, "sea").altitude_m == 60_500.0
 
 
-def test_readings_are_taken_a_few_times_a_second_not_on_every_call():
+def test_without_a_stream_readings_are_taken_a_few_times_a_second_not_on_every_call():
     ship, booster = FakeVessel(0.0), FakeVessel(100.0)
     tracker = BoosterTracker()
     centre = centre_with(ship, booster)
@@ -70,17 +118,62 @@ def test_readings_are_taken_a_few_times_a_second_not_on_every_call():
     assert tracker.update(1.0 + READ_EVERY_SECONDS * 1.1, centre, False).speed_ms == 500.0
 
 
-def test_the_booster_is_lost_for_good_when_the_game_stops_reporting_it():
+def test_with_streams_every_call_picks_up_the_newest_value_without_asking_the_game():
+    ship, booster, conn = FakeVessel(0.0), FakeVessel(100.0), FakeConn()
+    tracker = BoosterTracker()
+    centre = centre_with(ship, booster)
+    separated(tracker, centre, conn=conn)
+    assert len(conn.streams) == 2  # speed and altitude
+    booster.speed = 700.0
+    assert tracker.update(1.01, centre, False, "surface", conn).speed_ms == 700.0  # 10 ms later: already the new value
+    booster.speed = 650.0
+    assert tracker.update(1.02, centre, False, "surface", conn).speed_ms == 650.0
+    asked = booster.parts_calls
+    for step in range(30):  # a second and a half of readings at 20 a second
+        tracker.update(1.05 + step * 0.05, centre, False, "surface", conn)
+    assert booster.parts_calls - asked <= 2  # the parts are only looked at about once a second
+
+
+def test_the_streams_follow_the_altitude_setting_and_are_dropped_when_the_booster_is_done():
+    ship, booster, conn = FakeVessel(0.0), FakeVessel(100.0), FakeConn()
+    tracker = BoosterTracker()
+    centre = centre_with(ship, booster)
+    separated(tracker, centre, conn=conn)
+    assert tracker.update(2.0, centre, False, "sea", conn).altitude_m == 60_500.0
+    assert len(conn.streams) == 2  # the old pair was replaced, not added to
+    booster.unloaded = True
+    tracker.update(3.0 + PARTS_EVERY_SECONDS, centre, False, "surface", conn)
+    tracker.update(4.0 + NO_DATA_SECONDS + PARTS_EVERY_SECONDS, centre, False, "surface", conn)
+    assert conn.streams == []
+
+
+def test_an_unloaded_booster_says_no_data_for_a_while_and_then_the_gauges_come_off():
+    ship, booster = FakeVessel(0.0), FakeVessel(100.0)
+    tracker = BoosterTracker()
+    centre = centre_with(ship, booster)
+    separated(tracker, centre)
+    booster.unloaded = True  # KSP stops simulating it: no parts, though speed and altitude still read
+    start = 2.0 + PARTS_EVERY_SECONDS
+    reading = tracker.update(start, centre, False)
+    assert reading.live and reading.speed_ms is None and reading.altitude_m is None  # the gauges show NO DATA
+    assert tracker.update(start + NO_DATA_SECONDS - 1.0, centre, False).live
+    assert not tracker.update(start + NO_DATA_SECONDS + 0.5, centre, False).live
+    booster.unloaded = False
+    assert not tracker.update(start + NO_DATA_SECONDS + 5.0, centre, False).live  # and it does not come back
+
+
+def test_the_booster_is_lost_when_the_game_stops_reporting_it():
     ship, booster = FakeVessel(0.0), FakeVessel(100.0)
     tracker = BoosterTracker()
     centre = centre_with(ship, booster)
     separated(tracker, centre)
     booster.fail = True
-    assert tracker.update(2.0, centre, False).live  # one failed reading is not the end: the last good one stays
-    assert tracker.update(2.0 + LOST_AFTER_SECONDS + 0.5, centre, False) == tracker.reading
-    assert not tracker.reading.live and tracker.reading.speed_ms is None
+    assert tracker.update(2.0, centre, False).speed_ms == 800.0  # one failed reading is not the end: the last good one stays
+    reading = tracker.update(2.0 + LOST_AFTER_SECONDS + 0.5, centre, False)
+    assert reading.live and reading.speed_ms is None  # NO DATA first
+    assert not tracker.update(2.0 + LOST_AFTER_SECONDS + NO_DATA_SECONDS + 1.0, centre, False).live
     booster.fail = False
-    assert not tracker.update(20.0, centre, False).live  # and it does not come back
+    assert not tracker.update(60.0, centre, False).live
 
 
 def test_a_stack_again_clears_what_was_followed():
@@ -120,5 +213,6 @@ def test_no_record_is_written_without_a_path_and_a_bad_path_does_not_stop_anythi
         separated(tracker, centre)
         booster.fail = True
         tracker.update(2.0, centre, False)
-        assert not tracker.update(10.0, centre, False).live
+        tracker.update(2.0 + LOST_AFTER_SECONDS + 0.5, centre, False)
+        assert not tracker.update(60.0, centre, False).live
         booster.fail = False

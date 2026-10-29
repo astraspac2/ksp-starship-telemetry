@@ -72,7 +72,7 @@ def _ticks(painter: QPainter, center: QPointF, radius: float, fraction: float, t
 
 
 def draw_value_gauge(
-    painter: QPainter, center: QPointF, radius: float, fraction: float, label: str, value: str, unit: str, theme: Theme, backing: bool = False
+    painter: QPainter, center: QPointF, radius: float, fraction: float, label: str, value: str, unit: str, theme: Theme, backing: bool = False, value_scale: float = 1.0
 ) -> None:
     """Open ring with a label above the value and a unit below, as for SPEED and ALTITUDE.
 
@@ -86,7 +86,7 @@ def draw_value_gauge(
     # The three lines sit close together, as on the overlay: label above the number, unit just below it.
     wide = QRectF(centre_x - radius, 0, 2 * radius, 0)  # a column as wide as the ring, positioned per line below
     draw_text(painter, QRectF(wide.left(), center.y() - radius * 0.575, wide.width(), 20), Qt.AlignHCenter | Qt.AlignTop, label, small, theme.soft)
-    value_font = theme.make_font(theme.value_px, theme.clock_weight, theme.value_spacing, wide=True)
+    value_font = theme.make_font(round(theme.value_px * value_scale), theme.clock_weight, theme.value_spacing, wide=True)
     draw_text(
         painter,
         QRectF(box.left() - 20, center.y() - 27, box.width() + 40, 52),
