@@ -32,11 +32,11 @@ def test_flaps_out_are_the_pose_the_model_is_drawn_in_and_retracting_folds_each_
 
 
 def test_the_stick_moves_only_the_flaps_that_answer_that_axis():
-    assert fold_degrees(OUT, True, True, 1.0, 0, 0) == 0.0  # pitch is off for this flap: the stick does nothing
-    pitching = {**OUT, "Pitch": "False"}  # False = the flap answers pitch
+    assert fold_degrees(RETRACTED, True, True, 1.0, 0, 0) == 50.0  # pitch is off for this flap: the stick does nothing
+    pitching = {**RETRACTED, "Pitch": "False"}  # False = the flap answers pitch
     forward, aft = fold_degrees(pitching, True, True, 1.0, 0, 0), fold_degrees(pitching, False, True, 1.0, 0, 0)
-    assert (forward, aft) == (-40.0, 40.0)  # forward and aft go against each other; full stick is the authority limiter (40)
-    rolling = {**OUT, "Roll": "False"}
+    assert (forward, aft) == (10.0, 90.0)  # forward and aft go against each other; full stick is the authority limiter (40)
+    rolling = {**RETRACTED, "Roll": "False"}
     assert fold_degrees(rolling, True, True, 0, 0, 1.0) != fold_degrees(rolling, True, False, 0, 0, 1.0)  # left and right go against each other
 
 
@@ -218,22 +218,22 @@ def test_when_the_readings_stop_the_flaps_stay_as_they_were_last_seen(qapp):
 
 
 def test_a_flap_whose_fields_read_false_for_the_axes_follows_the_stick_as_the_games_panel_says_active():
-    as_in_the_game = {**OUT, "Pitch": "False", "Yaw": "False", "Roll": "False"}  # what the recorded flaps read: "Active" in the panel
+    as_in_the_game = {**RETRACTED, "Pitch": "False", "Yaw": "False", "Roll": "False"}  # what the recorded flaps read: "Active" in the panel
     assert fold_degrees(as_in_the_game, True, True, 1.0, 0, 0) != fold_degrees(as_in_the_game, True, True, 0.0, 0, 0)
     assert fold_degrees(as_in_the_game, True, True, 0, 0, 1.0) != fold_degrees(as_in_the_game, True, True, 0, 0, 0.0)
 
 
 def test_yaw_works_the_diagonal_pairs_against_each_other_and_only_where_the_flap_answers_it():
-    active = {**OUT, "Yaw": "False"}
+    active = {**RETRACTED, "Yaw": "False"}
     fwd_left, fwd_right = fold_degrees(active, True, True, 0, 1.0, 0), fold_degrees(active, True, False, 0, 1.0, 0)
     aft_left, aft_right = fold_degrees(active, False, True, 0, 1.0, 0), fold_degrees(active, False, False, 0, 1.0, 0)
     assert fwd_left == aft_right and fwd_right == aft_left and fwd_left != fwd_right  # forward-left with aft-right
-    assert fold_degrees(OUT, True, True, 0, 1.0, 0) == 0.0  # yaw is off for this flap: the stick does nothing
+    assert fold_degrees(RETRACTED, True, True, 0, 1.0, 0) == 50.0  # yaw is off for this flap: the stick does nothing
 
 
-def test_a_retracted_flap_does_not_follow_the_stick():
-    retracted = {**RETRACTED, "Pitch": "False", "Yaw": "False", "Roll": "False"}
-    assert fold_degrees(retracted, True, True, 1.0, 1.0, 1.0) == fold_degrees(retracted, True, True, 0, 0, 0) == 50.0
+def test_a_flap_with_deploy_false_does_not_follow_the_stick():
+    out = {**OUT, "Pitch": "False", "Yaw": "False", "Roll": "False"}
+    assert fold_degrees(out, True, True, 1.0, 1.0, 1.0) == fold_degrees(out, True, True, 0, 0, 0) == 0.0
 
 
 def test_the_tracker_logs_a_row_only_when_something_about_the_flaps_changes(tmp_path):

@@ -54,7 +54,7 @@ def fold_degrees(fields: dict, forward: bool, left: bool, pitch: float, yaw: flo
         stick += roll * ROLL_SIGN_LEFT * (1.0 if left else -1.0)
     if not _flag(fields.get("Yaw")):
         stick += yaw * YAW_SIGN * (1.0 if forward else -1.0) * (1.0 if left else -1.0)
-    stick = 0.0 if retracted else max(-1.0, min(1.0, stick))  # a retracted flap is stowed: the stick does not move it
+    stick = max(-1.0, min(1.0, stick)) if retracted else 0.0  # the stick moves a flap only while Deploy is True (recorded: the real flaps follow it then, and sit still with Deploy False)
     fold = (deploy_angle if retracted else 0.0) - limiter * stick
     return max(FOLD_LIMITS[0], min(FOLD_LIMITS[1], fold))
 
