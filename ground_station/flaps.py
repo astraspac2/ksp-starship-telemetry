@@ -29,7 +29,7 @@ FOLD_LIMITS = (-90.0, 90.0)
 PITCH_SIGN_FORWARD = 1.0
 ROLL_SIGN_LEFT = -1.0  # (turned round after a test in the game)
 FORWARD_FOLD_SCALE = 0.6  # the forward flaps already lean back, so the same fold takes them too far in: they swing this share of it
-AFT_FOLD_SCALE = 0.98  # the aft flaps swing a little less far, so folded flat against the ship they do not clip into it
+AFT_FOLD_SCALE = 0.94  # the aft flaps swing a little less far, so folded flat against the ship they do not clip into it
 YAW_SIGN = 1.0  # yaw works the diagonal pairs against each other: forward-left with aft-right
 
 

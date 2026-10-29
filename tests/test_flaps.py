@@ -28,7 +28,7 @@ def qapp():
 def test_flaps_out_are_the_pose_the_model_is_drawn_in_and_retracting_folds_each_by_the_deploy_angle():
     for forward in (True, False):
         assert fold_degrees(OUT, forward, True, 0, 0, 0) == 0.0
-    assert fold_degrees(RETRACTED, False, True, 0, 0, 0) == pytest.approx(50.0 * AFT_FOLD_SCALE) == pytest.approx(49.0)
+    assert fold_degrees(RETRACTED, False, True, 0, 0, 0) == pytest.approx(50.0 * AFT_FOLD_SCALE) == pytest.approx(47.0)
     assert fold_degrees(RETRACTED, True, True, 0, 0, 0) == 50.0 * FORWARD_FOLD_SCALE == 30.0  # the forward flaps swing less far
 
 
@@ -68,7 +68,7 @@ def conn_with(vessel):
 
 def test_the_four_flaps_are_read_in_order():
     tracker = FlapTracker()
-    assert tracker.update(0.0, conn_with(FakeVessel(RETRACTED))) == (30.0, 30.0, 49.0, 49.0)
+    assert tracker.update(0.0, conn_with(FakeVessel(RETRACTED))) == (30.0, 30.0, 47.0, 47.0)
     assert len(FLAPS) == 4
 
 
@@ -87,7 +87,7 @@ def test_readings_are_not_asked_for_more_than_a_few_times_a_second():
     vessel.parts = SimpleNamespace(with_name=lambda name: [FakePart(name, dict(RETRACTED))])
     assert tracker.update(0.05, conn_with(vessel)) == (0.0,) * 4  # too soon: the old reading
     tracker.reset()
-    assert tracker.update(0.3, conn_with(vessel)) == (30.0, 30.0, 49.0, 49.0)
+    assert tracker.update(0.3, conn_with(vessel)) == (30.0, 30.0, 47.0, 47.0)
 
 
 def test_a_game_that_stops_answering_gives_nothing_instead_of_old_flaps():
