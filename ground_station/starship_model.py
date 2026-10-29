@@ -49,9 +49,7 @@ GLOSS_BOOSTER = 0.85
 GLOSS_TILE = 0.04
 GLOSS_FLAP = 0.12
 
-TILE_WIDE_ANGLE = np.radians(150)  # on the nose and the short stretch under it the heat shield reaches further round, ending in a step
-WIDE_STRETCH = 0.075  # that stretch below the nose, as a fraction of the ship's length
-TILE_HALF_ANGLE = np.radians(105)  # the heat shield: half the circumference in the pictures, a little more so it shows from most angles
+TILE_HALF_ANGLE = np.radians(94)  # the heat shield: half the circumference in the pictures, a little more so it shows from most angles
 # The heat shield (and with it the flaps' lean and the one grid fin on the shield side) sits on the model's -Z side. The dial turns
 # the model with the vessel's rotation, the model's +Z being the vessel's top; kRPC's vessel frame has its Z axis out of the
 # bottom, and on the user's Starship that is the side with the heat shield, the lone grid fin and the aft engine. (Recorded on the
@@ -91,6 +89,15 @@ def _body_radius(height: float) -> float:
     if height >= 0.5 - nose_length:
         return _nose_radius(min(max((0.5 - height) / nose_length, 0.0), 1.0))
     return BODY_RADIUS
+
+
+def _tile_reach(height: float) -> float:
+    """How far round from the heat shield's centre line the black tiles reach at this height: about half way on the barrel, then
+    opening up over the nose until they cover it all the way round, so the steel side ends in a rounded point (the pictures)."""
+    barrel_top = 0.5 - NOSE_SHARE * SHIP_LENGTH
+    black_bottom = 0.5 - NOSE_SHARE * SHIP_LENGTH * NOSE_BLACK_SHARE
+    t = min(max((height - barrel_top) / (black_bottom - barrel_top), 0.0), 1.0)
+    return TILE_HALF_ANGLE + (np.pi - TILE_HALF_ANGLE) * t * t * (3.0 - 2.0 * t)
 
 
 def _engine_layout() -> list[tuple[float, float]]:
@@ -143,8 +150,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
                 c, d = starts[r + 1] + k, starts[r + 1] + (k + 1) % segments
                 middle = 2 * np.pi * (k + 0.5) / segments
                 diff = abs((middle - TILE_CENTRE + np.pi) % (2 * np.pi) - np.pi)
-                reach = TILE_WIDE_ANGLE if rings[r][0] > 0.5 - (NOSE_SHARE + WIDE_STRETCH) * SHIP_LENGTH else TILE_HALF_ANGLE
-                if tiles and diff < reach:
+                if tiles and diff < _tile_reach((rings[r][0] + rings[r + 1][0]) / 2):
                     # staggered tiles: a slight chequer of brightness, offset on alternate rows, as on the shield
                     shade = 1.0 + 0.05 * (((k + r % 2) % 2) - 0.5) + 0.025 * (((k * 5 + r * 3) % 4) - 1.5)
                     colour, shine = TILE * shade, GLOSS_TILE
@@ -256,7 +262,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         if abs(side - RACEWAY_OFFSET) < np.radians(3) and ship_height(RACEWAY_TO) <= middle <= ship_height(RACEWAY_FROM):
             return RACEWAY, 0.5
         # stainless panels: alternate bands a touch light and dark, and a faint seam every few segments
-        return SHIP_STEEL * (1.0 + 0.012 * ((k + band) % 2 - 0.5) * 2 + (0.012 if band % 2 else -0.012)) * (0.985 if k % 7 == 0 else 1.0), GLOSS_STEEL
+        return SHIP_STEEL * (1.0 + 0.03 * (((k // 3 + band) % 2) - 0.5)) * (0.985 if k % 7 == 0 else 1.0), GLOSS_STEEL
 
     ship_first = tube(ship_rings, ship_colour, tiles=True)
     cap(SPLIT_Y + 0.001, ship_first + (len(ship_rings) - 1) * segments, ENGINES)  # the ship's bottom, so it is not hollow once it is free
@@ -287,15 +293,17 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
     decal([(-0.0030, -h), (-0.0014, -h), (0.0042, h * 0.94), (0.0034, h)], window_height, LOGO, 0.0023)
     decal([(-0.0046, -0.0006), (0.0034, 0.0012), (0.0036, 0.0001), (-0.0044, -0.0018)], window_height, LOGO, 0.0023)
 
-    # the raised ablative lip: a dark pad on each side where the wider nose shield steps down to the narrower one on the barrel
-    lip_height = ship_height(NOSE_SHARE + WIDE_STRETCH * 0.6)
+    # the raised ablative edge: a thin ridge along each side where the black shield meets the steel, from the nose down to the tail
+    ridge_heights = [h for h, _ in ship_rings if h < 0.5 - NOSE_SHARE * SHIP_LENGTH * NOSE_BLACK_SHARE]
     for side in (-1, 1):
-        centre_angle = TILE_CENTRE + side * 0.5 * (TILE_WIDE_ANGLE + TILE_HALF_ANGLE)
-        points = []
-        for u, v in rounded(0.019, 0.026, 0.004):
-            angle = centre_angle + u / BODY_RADIUS
-            points.append(((BODY_RADIUS + 0.0022) * np.cos(angle), lip_height + v, (BODY_RADIUS + 0.0022) * np.sin(angle)))
-        flat(points, TILE * 1.25, GLOSS_TILE)
+        for h0, h1 in zip(ridge_heights, ridge_heights[1:]):
+            corners = []
+            for height in (h0, h1):
+                angle = TILE_CENTRE + side * _tile_reach(height)
+                radius = _body_radius(height) + 0.0016
+                half = 0.0020 / max(radius, 1e-6)
+                corners.append([(radius * np.cos(angle - half), height, radius * np.sin(angle - half)), (radius * np.cos(angle + half), height, radius * np.sin(angle + half))])
+            flat([corners[0][0], corners[0][1], corners[1][1], corners[1][0]], TILE * 0.7, 0.1)
 
     # the booster: slotted hot-stage ring, barrel in bands with a dark belt, then the engine skirt and its bells
     ring_bottom = SPLIT_Y - HOT_STAGE_HEIGHT
