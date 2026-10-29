@@ -23,10 +23,10 @@ from .mesh import Mesh
 
 SHIP_LENGTH = 0.44
 SPLIT_Y = 0.5 - SHIP_LENGTH  # where the ship's bottom meets the booster, in model height
-BODY_RADIUS = 0.040  # the ship is 5.5 diameters long, a little fatter than the real 5.6 so it still reads on a small dial
+BODY_RADIUS = 0.037  # the ship is 6 diameters long, as measured on the picture of it
 DIAMETER = 2 * BODY_RADIUS
 NOSE_SHARE = 0.16  # of the ship's length: the ogive reaches its full width this far from the tip (measured on a picture of the ship)
-NOSE_BLACK_SHARE = 0.70  # of the nose is black tile all the way round, even on the steel side
+NOSE_BLACK_SHARE = 0.63  # of the nose is black tile all the way round, even on the steel side
 HOT_STAGE_HEIGHT = 0.022
 SKIRT_TOP = -0.47  # the engine skirt runs from here down to the bells at -0.5
 SEGMENTS = 28  # round the axis: enough that the silhouette is smooth at the dial's size
@@ -74,8 +74,9 @@ BELL_RADIUS = 0.0036  # one engine bell on the booster's bottom
 
 
 def _nose_radius(s: float) -> float:
-    """Ogive nose: radius at fraction s (0 at the tip, 1 where the nose meets the barrel). Fits the pictures' outline."""
-    return BODY_RADIUS * (1.0 - (1.0 - s) ** 1.4)
+    """The nose: radius at fraction s (0 at the tip, 1 where the nose meets the barrel). Measured on the picture of the ship:
+    a blunt, rounded tip (already a quarter of the full width a few pixels down), then an almost straight cone."""
+    return BODY_RADIUS * max(s, 0.0) ** 0.6
 
 
 def _body_radius(height: float) -> float:
@@ -238,7 +239,9 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
     def ship_colour(upper: float, lower: float, k: int, band: int) -> tuple[np.ndarray, float]:
         middle = (upper + lower) / 2
         if middle > nose_black_bottom:  # the tip of the nose is black tile all the way round
-            return TILE * (1.0 + 0.10 * (((k + band % 2) % 2) - 0.5)), GLOSS_TILE
+            return TILE * (1.0 + 0.04 * (((k + band % 2) % 2) - 0.5)), GLOSS_TILE
+        if middle > barrel_top:  # the steel part of the nose: matt, so it does not flash a bright crescent under the black tip
+            return SHIP_STEEL, 0.25
         if any(bottom <= middle <= top for top, bottom in belts):
             return SHIP_BELT, GLOSS_STEEL
         side = abs((2 * np.pi * (k + 0.5) / segments - steel_centre + np.pi) % (2 * np.pi) - np.pi)  # how far round from the steel side's centre line
@@ -294,17 +297,17 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         grid_fin(TILE_CENTRE + turn, ring_bottom - 0.040)
 
     # forward flaps (swept, just below the nose) and aft flaps (big, near the bottom of the ship)
-    forward = [  # measured on the picture: swept, the leading edge slants out and down from near the tip
-        (0.0, ship_height(0.076)),
-        (0.31 * DIAMETER, ship_height(0.142)),
-        (0.31 * DIAMETER, ship_height(0.190)),
-        (0.0, ship_height(0.195)),
+    forward = [  # measured on the picture: the leading edge slants out from the nose to the tip, a short straight outer edge
+        (0.0, ship_height(0.069)),
+        (0.35 * DIAMETER, ship_height(0.145)),
+        (0.35 * DIAMETER, ship_height(0.186)),
+        (0.0, ship_height(0.190)),
     ]
-    aft = [  # a big wing: the top edge slants out and down, a straight outer edge, a nearly flat bottom
-        (0.0, ship_height(0.770)),
-        (0.46 * DIAMETER, ship_height(0.830)),
-        (0.46 * DIAMETER, ship_height(0.964)),
-        (0.0, ship_height(0.977)),
+    aft = [  # measured on the picture: a long slanted top edge, a straight outer edge down almost to the bottom
+        (0.0, ship_height(0.730)),
+        (0.42 * DIAMETER, ship_height(0.851)),
+        (0.42 * DIAMETER, ship_height(0.979)),
+        (0.0, ship_height(0.985)),
     ]
     # seen from above (the nose pointing at you, the heat shield below): the forward flaps lean back toward the steel
     # side, the aft flaps stick out straight to each side
