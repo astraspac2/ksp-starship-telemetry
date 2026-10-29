@@ -8,7 +8,7 @@ Measured from pictures of the user's KSP vessel (ship and booster alone, and the
   booster  a slotted hot-stage ring on top, three lattice grid fins (the steel side has none) just under it, a dark weld belt
            about a third of the way down and a deep engine skirt whose 33 bells stick out at the bottom.
 
-Proportions are the pictures' (ship and booster about 5.8 and 7.9 diameters long), but the body is drawn about 2 times wider
+Proportions are the pictures' (ship and booster about 5.8 and 7.9 diameters long), but the body is drawn about 1.15 times wider
 than that so it still reads on a small dial.
 
 The round bodies carry smooth normals and a gloss, so the renderer shades them without facets and puts a glint on the polished
@@ -23,7 +23,7 @@ from .mesh import Mesh
 
 SHIP_LENGTH = 0.44
 SPLIT_Y = 0.5 - SHIP_LENGTH  # where the ship's bottom meets the booster, in model height
-BODY_RADIUS = 0.052
+BODY_RADIUS = 0.043  # about 1.15 times the real thing's share of its length, so it still reads on a small dial
 DIAMETER = 2 * BODY_RADIUS
 NOSE_SHARE = 0.25  # of the ship's length
 HOT_STAGE_HEIGHT = 0.022
@@ -40,7 +40,7 @@ RING_DARK = np.array([0.34, 0.35, 0.39])
 ENGINES = np.array([0.20, 0.20, 0.23])
 BELL = np.array([0.09, 0.09, 0.11])  # the inside of an engine bell, seen from below
 FIN = np.array([0.72, 0.73, 0.77])
-FIN_HOLE = np.array([0.20, 0.21, 0.25])  # the gaps in a grid fin's lattice
+FIN_HOLE = np.array([0.30, 0.31, 0.36])  # the gaps in a grid fin's lattice
 FLAP = np.array([0.24, 0.25, 0.29])
 
 GLOSS_STEEL = 0.75
@@ -62,7 +62,7 @@ AFT_FLAP_THICKNESS = 0.016
 
 SHIP_BELTS: tuple[tuple[float, float], ...] = ()  # (from, to) as fractions of the ship's length from its tip; none: too fine for the dial
 BOOSTER_BELT = (0.345, 0.375)  # as fractions of the booster's length from its top
-BELL_RADIUS = 0.0046  # one engine bell on the booster's bottom
+BELL_RADIUS = 0.0039  # one engine bell on the booster's bottom
 
 
 def _nose_radius(s: float) -> float:
@@ -190,9 +190,9 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         """A grid fin: a flat lattice sticking out sideways from the booster, bars with dark gaps between them."""
         direction = np.array([np.cos(angle), np.sin(angle)])
         sideways = np.array([-direction[1], direction[0]])
-        inner, outer = BODY_RADIUS * 0.9, BODY_RADIUS + 0.40 * DIAMETER
-        half_width, thickness = 0.15 * DIAMETER, 0.008
-        along_cells, across_cells = 6, 3
+        inner, outer = BODY_RADIUS * 0.9, BODY_RADIUS + 0.55 * DIAMETER
+        half_width, thickness = 0.20 * DIAMETER, 0.008
+        along_cells, across_cells = 7, 4
         def at(along: float, across: float, level: float) -> tuple[float, float, float]:
             x, z = direction * along + sideways * across
             return (float(x), level, float(z))
@@ -201,7 +201,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
             for j in range(across_cells):
                 lo, hi = inner + (outer - inner) * i / along_cells, inner + (outer - inner) * (i + 1) / along_cells
                 left, right = -half_width + 2 * half_width * j / across_cells, -half_width + 2 * half_width * (j + 1) / across_cells
-                hole = j == 1 and 1 <= i <= along_cells - 2  # a bar all round the edge and the gaps inside, which reads as a lattice at this size
+                hole = i % 2 == 1 and 1 <= i <= along_cells - 2 and 1 <= j <= across_cells - 2  # a bar all round the edge and bars between the gaps: a lattice
                 for level in (height + thickness / 2, height - thickness / 2):
                     flat([at(lo, left, level), at(hi, left, level), at(hi, right, level), at(lo, right, level)], FIN_HOLE if hole else FIN, 0.2)
 
@@ -273,20 +273,16 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         grid_fin(TILE_CENTRE + turn, ring_bottom - 0.040)
 
     # forward flaps (swept, just below the nose) and aft flaps (big, near the bottom of the ship)
-    forward = [
+    forward = [  # swept: the leading edge slants out and back from the nose, the tip is a sharp corner
         (0.0, ship_height(0.115)),
-        (0.30 * DIAMETER, ship_height(0.150)),
-        (0.40 * DIAMETER, ship_height(0.180)),
-        (0.40 * DIAMETER, ship_height(0.212)),
-        (0.28 * DIAMETER, ship_height(0.228)),
+        (0.40 * DIAMETER, ship_height(0.185)),
+        (0.40 * DIAMETER, ship_height(0.228)),
         (0.0, ship_height(0.228)),
     ]
-    aft = [
+    aft = [  # a big wing: the top edge slants out and down, a straight outer edge and a flat bottom
         (0.0, ship_height(0.80)),
-        (0.30 * DIAMETER, ship_height(0.84)),
-        (0.44 * DIAMETER, ship_height(0.90)),
-        (0.44 * DIAMETER, ship_height(0.962)),
-        (0.32 * DIAMETER, ship_height(0.985)),
+        (0.44 * DIAMETER, ship_height(0.875)),
+        (0.44 * DIAMETER, ship_height(0.985)),
         (0.0, ship_height(0.985)),
     ]
     # seen from above (the nose pointing at you, the heat shield below): the forward flaps lean back toward the steel

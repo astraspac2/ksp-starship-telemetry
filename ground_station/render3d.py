@@ -28,6 +28,9 @@ EDGE_DARKENING = 0.65  # how dark the faces of a closed body get at its silhouet
 LIGHT_VIEW = np.array([-0.45, 0.65, -0.62])  # from the upper left, toward the viewer (view z grows away from it)
 HIGHLIGHT_SHARPNESS = 28.0  # how tight the glint on a shiny face is
 HIGHLIGHT_STRENGTH = 0.55  # and how bright, at full gloss
+REFLECTION = 0.45  # how much of a shiny face is the sky and ground reflected in it, at full gloss
+SKY = np.array([0.92, 0.96, 1.0])  # what a shiny face reflects looking up, and looking down
+GROUND = np.array([0.40, 0.38, 0.42])
 
 
 def view_matrix() -> np.ndarray:
@@ -189,8 +192,18 @@ class ModelRenderer:
         pixels = np.empty_like(tri[:, :, :2])
         pixels[:, :, 0] = centre + tri[:, :, 0] * scale
         pixels[:, :, 1] = centre - tri[:, :, 1] * scale
-        lit = self._colours[keep] * shade[:, None]
+        base_colour = self._colours[keep]
+        lit = base_colour * shade[:, None]
         gloss = self._gloss[keep]
+        if gloss.any():  # shiny faces mirror the sky above and the ground below, tinted by their metal
+            ahead = np.array([0.0, 0.0, 1.0])  # the way the viewer looks, in view space
+            bounce = ahead[None, :] - 2.0 * (normal @ ahead)[:, None] * normal
+            up = self._view @ np.array([0.0, 0.0, 1.0])  # which way is up, in view space
+            sky = np.clip(0.5 + 0.9 * (bounce @ up), 0.0, 1.0)
+            sky = sky * sky * (3.0 - 2.0 * sky)
+            mirror = GROUND[None, :] * (1.0 - sky[:, None]) + SKY[None, :] * sky[:, None]
+            weight = (gloss * REFLECTION)[:, None]
+            lit = lit * (1.0 - weight) + base_colour * mirror * weight * 1.5
         if gloss.any():  # a glint where a shiny face catches the light, brightest where its normal bisects light and viewer
             half = light + np.array([0.0, 0.0, -1.0])
             half /= np.linalg.norm(half)
