@@ -24,7 +24,8 @@ RESCAN_EVERY_SECONDS = 3.0  # looking for the flaps again when they were not fou
 FOLD_LIMITS = (-90.0, 90.0)
 # which way the stick moves a flap (+1 = toward deployed): pitch works the forward and aft flaps against each other, roll the left and right
 PITCH_SIGN_FORWARD = 1.0
-ROLL_SIGN_LEFT = 1.0
+ROLL_SIGN_LEFT = -1.0  # (turned round after a test in the game)
+YAW_SIGN = 1.0  # yaw works the diagonal pairs against each other: forward-left with aft-right
 
 
 def _number(text, default: float) -> float:
@@ -48,7 +49,9 @@ def fold_degrees(fields: dict, forward: bool, left: bool, pitch: float, yaw: flo
         stick += pitch * PITCH_SIGN_FORWARD * (1.0 if forward else -1.0)
     if not _flag(fields.get("Roll")):
         stick += roll * ROLL_SIGN_LEFT * (1.0 if left else -1.0)
-    stick = max(-1.0, min(1.0, stick))  # yaw is not drawn: how the ship's flaps answer it is not known
+    if not _flag(fields.get("Yaw")):
+        stick += yaw * YAW_SIGN * (1.0 if forward else -1.0) * (1.0 if left else -1.0)
+    stick = 0.0 if retracted else max(-1.0, min(1.0, stick))  # a retracted flap is stowed: the stick does not move it
     fold = (deploy_angle if retracted else 0.0) - limiter * stick
     return max(FOLD_LIMITS[0], min(FOLD_LIMITS[1], fold))
 

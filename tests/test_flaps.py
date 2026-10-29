@@ -218,6 +218,19 @@ def test_when_the_readings_stop_the_flaps_stay_as_they_were_last_seen(qapp):
 
 
 def test_a_flap_whose_fields_read_false_for_the_axes_follows_the_stick_as_the_games_panel_says_active():
-    as_in_the_game = {**RETRACTED, "Pitch": "False", "Yaw": "False", "Roll": "False"}  # what the recorded flaps read: "Active" in the panel
+    as_in_the_game = {**OUT, "Pitch": "False", "Yaw": "False", "Roll": "False"}  # what the recorded flaps read: "Active" in the panel
     assert fold_degrees(as_in_the_game, True, True, 1.0, 0, 0) != fold_degrees(as_in_the_game, True, True, 0.0, 0, 0)
     assert fold_degrees(as_in_the_game, True, True, 0, 0, 1.0) != fold_degrees(as_in_the_game, True, True, 0, 0, 0.0)
+
+
+def test_yaw_works_the_diagonal_pairs_against_each_other_and_only_where_the_flap_answers_it():
+    active = {**OUT, "Yaw": "False"}
+    fwd_left, fwd_right = fold_degrees(active, True, True, 0, 1.0, 0), fold_degrees(active, True, False, 0, 1.0, 0)
+    aft_left, aft_right = fold_degrees(active, False, True, 0, 1.0, 0), fold_degrees(active, False, False, 0, 1.0, 0)
+    assert fwd_left == aft_right and fwd_right == aft_left and fwd_left != fwd_right  # forward-left with aft-right
+    assert fold_degrees(OUT, True, True, 0, 1.0, 0) == 0.0  # yaw is off for this flap: the stick does nothing
+
+
+def test_a_retracted_flap_does_not_follow_the_stick():
+    retracted = {**RETRACTED, "Pitch": "False", "Yaw": "False", "Roll": "False"}
+    assert fold_degrees(retracted, True, True, 1.0, 1.0, 1.0) == fold_degrees(retracted, True, True, 0, 0, 0) == 50.0
