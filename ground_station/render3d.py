@@ -60,6 +60,19 @@ def body_to_world(pitch_deg: float, heading_deg: float, roll_deg: float) -> np.n
     return np.column_stack([right, nose, top])
 
 
+GLOW_RED = np.array([0.62, 0.05, 0.01])  # the shield's glow as it comes up: dull red,
+GLOW_ORANGE = np.array([1.00, 0.36, 0.03])  # then orange,
+GLOW_WHITE = np.array([1.00, 0.86, 0.55])  # then white-hot
+
+
+def glow_colour(glow: float) -> np.ndarray:
+    """The colour of the heat shield's own light at this glow strength (0..1)."""
+    g = min(max(glow, 0.0), 1.0)
+    if g < 0.55:
+        return GLOW_RED + (GLOW_ORANGE - GLOW_RED) * (g / 0.55)
+    return GLOW_ORANGE + (GLOW_WHITE - GLOW_ORANGE) * ((g - 0.55) / 0.45)
+
+
 class ModelRenderer:
     def __init__(self, mesh: Mesh, size_px: int):
         """`size_px` is the width and height of the finished picture; the model is one unit long inside it."""
@@ -75,6 +88,7 @@ class ModelRenderer:
         self._smooth = self._smooth_normals(mesh)  # (M, 3) outward model-space normals of round faces (zero where the face is flat)
         self._gloss = mesh.face_gloss.astype(np.float64) if mesh.face_gloss is not None else np.zeros(len(mesh.faces))
         self._lift = mesh.face_lift.astype(np.float64) if mesh.face_lift is not None else np.zeros(len(mesh.faces))
+        self._heat = mesh.face_heat.astype(np.float64) if mesh.face_heat is not None else np.zeros(len(mesh.faces))
         self._colours = mesh.face_colors if mesh.face_colors is not None else np.tile(BASE_COLOUR, (len(mesh.faces), 1))
         self.size_px = size_px
         self._cache: dict[tuple[int, int, int, int], QImage] = {}
@@ -171,17 +185,17 @@ class ModelRenderer:
         keep = np.arange(len(self._faces)) if step < PROGRESS_STEPS else np.flatnonzero(~self._is_booster)
         return corners, keep
 
-    def render_matrix(self, axes: np.ndarray, separation: float = 0.0, booster_only: bool = False) -> QImage:
+    def render_matrix(self, axes: np.ndarray, separation: float = 0.0, booster_only: bool = False, glow: float = 0.0) -> QImage:
         """The model for an exact orientation (columns: right, nose, top in east/north/up), without rounding to a degree.
 
         For a smoothly turning dial; nothing is cached, so call it only when the orientation has really changed.
         """
-        return self._draw_matrix(axes, round(min(max(separation, 0.0), 1.0) * PROGRESS_STEPS), booster_only)
+        return self._draw_matrix(axes, round(min(max(separation, 0.0), 1.0) * PROGRESS_STEPS), booster_only, glow)
 
     def _draw(self, pitch: float, heading: float, roll: float, step: int = 0) -> QImage:
         return self._draw_matrix(body_to_world(pitch, heading, roll), step)
 
-    def _draw_matrix(self, axes: np.ndarray, step: int, booster_only: bool = False) -> QImage:
+    def _draw_matrix(self, axes: np.ndarray, step: int, booster_only: bool = False, glow: float = 0.0) -> QImage:
         corners, keep = self._stage_triangles(step, booster_only)
         world = corners[keep].reshape(-1, 3) @ axes.T
         view = world @ self._view.T  # x right, y up, z away from the viewer
@@ -236,6 +250,9 @@ class ModelRenderer:
             half /= np.linalg.norm(half)
             glint = np.clip(normal @ half, 0.0, 1.0) ** HIGHLIGHT_SHARPNESS * gloss * HIGHLIGHT_STRENGTH
             lit = lit + glint[:, None]
+        if glow > 0.0:  # the re-entry glow: the heat shield's tiles give light of their own, less toward the edge of the ship
+            weight = np.clip(self._heat[keep] * glow * 1.3 * (0.7 + 0.3 * np.abs(normal[:, 2])), 0.0, 1.0)[:, None]
+            lit = lit * (1.0 - weight) + glow_colour(glow)[None, :] * weight * (0.8 + 0.2 * shade[:, None])
         colours = np.clip(lit, 0.0, 1.0)
         previous = None
         for index in order:

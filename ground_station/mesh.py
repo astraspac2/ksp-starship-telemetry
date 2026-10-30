@@ -41,6 +41,7 @@ class Mesh:
     vertex_normals: np.ndarray | None = None  # (N, 3) float32 outward normals, so a round body shades smoothly instead of in facets
     face_gloss: np.ndarray | None = None  # (M,) float32 0..1: how shiny each face is (a highlight where it catches the light)
     face_lift: np.ndarray | None = None  # (M,) float32: how much nearer to draw a face than its depth says, for parts lying on a surface
+    face_heat: np.ndarray | None = None  # (M,) float32 0..1: how much of the re-entry glow a face takes (the heat shield's black tiles)
     flaps: tuple[FlapRig, ...] = ()  # the parts that swing with the real vehicle's flaps, if the model has any
 
     @property

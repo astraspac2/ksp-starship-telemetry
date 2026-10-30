@@ -127,14 +127,16 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
     faces: list[tuple[int, int, int]] = []
     colours: list[np.ndarray] = []
     gloss: list[float] = []
+    heat: list[float] = []  # per face: how much of the re-entry glow it takes (1 = the heat shield's tiles)
     lift: list[float] = []  # per face: drawn this much nearer than its depth (parts lying on the booster's barrel)
     solid: list[bool] = []  # per face: part of a closed body round the axis
 
     draw_lift = 0.0
     flap_rigs: list[FlapRig] = []  # the four flaps' vertices and hinges, so they can be swung afterwards
 
-    def add_face(corners: tuple[int, int, int], colour: np.ndarray, shine: float, closed: bool) -> None:
+    def add_face(corners: tuple[int, int, int], colour: np.ndarray, shine: float, closed: bool, glow: float = 0.0) -> None:
         faces.append(corners)
+        heat.append(glow)
         colours.append(colour)
         gloss.append(shine)
         lift.append(draw_lift)
@@ -168,14 +170,15 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
                 c, d = starts[r + 1] + k, starts[r + 1] + (k + 1) % segments
                 middle = 2 * np.pi * (k + 0.5) / segments
                 diff = abs((middle - TILE_CENTRE + np.pi) % (2 * np.pi) - np.pi)
-                if tiles and diff < _tile_reach((rings[r][0] + rings[r + 1][0]) / 2):
+                tile_face = tiles and diff < _tile_reach((rings[r][0] + rings[r + 1][0]) / 2)
+                if tile_face:
                     # staggered tiles: a slight chequer of brightness, offset on alternate rows, as on the shield
                     shade = 1.0 + 0.05 * (((k + r % 2) % 2) - 0.5) + 0.025 * (((k * 5 + r * 3) % 4) - 1.5)
                     colour, shine = TILE * shade, GLOSS_TILE
                 else:
                     colour, shine = colour_of(rings[r][0], rings[r + 1][0], k, r)
                 for corners in ((a, c, b), (b, c, d)):
-                    add_face(corners, colour, shine, not step)
+                    add_face(corners, colour, shine, not step, 1.0 if tile_face else 0.0)
         return first
 
     def cap(height: float, ring_start: int, colour: np.ndarray) -> None:
@@ -198,6 +201,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
     def slab(
         corner_rows: list[list[tuple[float, float, float]]], colour: np.ndarray, shine: float,
         upper_colour: np.ndarray | None = None, lower_colour: np.ndarray | None = None,
+        upper_glow: float = 0.0, lower_glow: float = 0.0,
     ) -> None:
         """A thin slab given as its upper and lower outlines: both faces (each its own colour if asked) and the rim."""
         upper, lower = corner_rows
@@ -207,8 +211,8 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
             normals.append((0.0, 0.0, 0.0))
         count = len(upper)
         for k in range(1, count - 1):
-            add_face((start, start + k, start + k + 1), colour if upper_colour is None else upper_colour, shine, False)
-            add_face((start + count, start + count + k, start + count + k + 1), colour if lower_colour is None else lower_colour, shine, False)
+            add_face((start, start + k, start + k + 1), colour if upper_colour is None else upper_colour, shine, False, upper_glow)
+            add_face((start + count, start + count + k, start + count + k + 1), colour if lower_colour is None else lower_colour, shine, False, lower_glow)
         for k in range(count):
             a, b = start + k, start + (k + 1) % count
             c, d = start + count + k, start + count + (k + 1) % count
@@ -229,7 +233,7 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
                 row.append((x, height, z))
             rows.append(row)
         first = len(vertices)
-        slab(rows, FLAP, GLOSS_FLAP, FLAP_STEEL if steel_up else FLAP, FLAP if steel_up else FLAP_STEEL)
+        slab(rows, FLAP, GLOSS_FLAP, FLAP_STEEL if steel_up else FLAP, FLAP if steel_up else FLAP_STEEL, 0.0 if steel_up else 1.0, 1.0 if steel_up else 0.0)
         pivot = direction * BODY_RADIUS * 0.96  # the hinge: the flap's root on the body, a vertical line
         flap_rigs.append(FlapRig(first, len(vertices) - first, (float(pivot[0]), float(pivot[1])), forward, mirror))
 
@@ -497,5 +501,6 @@ def starship_stack(segments: int = SEGMENTS) -> Mesh:
         vertex_normals=np.asarray(normals, dtype=np.float32),
         face_gloss=np.asarray(gloss, dtype=np.float32),
         face_lift=np.asarray(lift, dtype=np.float32),
+        face_heat=np.asarray(heat, dtype=np.float32),
         flaps=tuple(flap_rigs),
     )

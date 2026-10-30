@@ -23,6 +23,7 @@ from .mesh import ModelError, builtin_rocket, load_prepared
 from .starship_model import starship_stack
 from .render3d import PROGRESS_STEPS, ModelRenderer, body_to_world
 from .source import DataSource
+from .heating import eased_glow
 from .telemetry import Telemetry
 from .textdraw import draw_text
 from .theme import STARSHIP, Theme
@@ -85,6 +86,7 @@ ATTITUDE_RESET_SECONDS = 0.5  # after a pause this long (the dial was hidden) it
 ATTITUDE_REDRAW_DELTA = 0.0015  # about a tenth of a degree
 FLAP_SPEED = 45.0  # degrees a second the dial's flaps swing at, toward what the game reports
 FLAP_STOWED_FOLDS = (0.0,) * 4  # the flaps drawn before the game has said anything: straight out sideways, as the ship stands on the pad
+GLOW_STEP = 0.04  # the re-entry glow is redrawn in steps of this much
 FLAP_STEP = 3.0  # the flaps are redrawn in steps of this many degrees (each new picture of the model costs a few tens of milliseconds)
 DOT_FADE_SECONDS = 0.12  # an engine dot closes about two thirds of the way to lit or dim in this long
 NO_DATA_TEXT = "NO DATA"  # what the booster's gauges say once it cannot be read
@@ -155,6 +157,10 @@ class TelemetryBar(HudWindow):
         self._show_panels = True
         self._panels_progress = 1.0  # 1 = the side panels are up, 0 = away; it runs between them at the speed of their rise at the start
         self._panels_time = time.monotonic()
+        self._reentry_glow = True
+        self._glow_shown = 0.0  # the re-entry glow as drawn, easing toward the game's
+        self._glow_drawn = 0.0
+        self._glow_time = 0.0
         self._flap_shown: tuple[float, ...] | None = None  # the folds of the four flaps as drawn, easing toward the game's
         self._flap_time = 0.0
         self._attitude_drawn: tuple[np.ndarray, int, bool, object] | None = None  # orientation, separation step, booster only, picture
@@ -250,6 +256,11 @@ class TelemetryBar(HudWindow):
         self._dot_levels.clear()
         self.update()
 
+    def set_reentry_glow(self, on: bool) -> None:
+        """Whether the ship's heat shield glows in the 3D dial while it comes down through the air."""
+        self._reentry_glow = on
+        self.update()
+
     def set_show_panels(self, show: bool) -> None:
         """Bring the side panels (gauges, engine cluster, dial) back or send them away, with the animation of their first rise, played
         forward or backward."""
@@ -304,6 +315,13 @@ class TelemetryBar(HudWindow):
         done = min(max((tel.t - tel.separated_at) / SEPARATION_ANIMATION_SECONDS, 0.0), 1.0)
         return 1.0 + (self._ship_scale - 1.0) * done * done * (3.0 - 2.0 * done)
 
+    def _ease_glow(self, target: float, now: float) -> float:
+        """The re-entry glow to draw: quick to heat up and slow to cool, in steps of GLOW_STEP so a new picture is only drawn when it shows."""
+        elapsed = min(max(now - self._glow_time, 0.0), 0.25)
+        self._glow_time = now
+        self._glow_shown = eased_glow(self._glow_shown, min(max(target, 0.0), 1.0) if self._reentry_glow else 0.0, elapsed)
+        return round(self._glow_shown / GLOW_STEP) * GLOW_STEP
+
     def _swing_flaps(self, target: tuple[float, ...] | None, now: float) -> bool:
         """Move the model's flaps toward the folds the game reports (at most FLAP_SPEED degrees a second, so they swing instead of
         jumping), in steps of FLAP_STEP degrees so a new picture is only drawn when it shows. Returns whether the picture must be redrawn.
@@ -342,11 +360,15 @@ class TelemetryBar(HudWindow):
                 shown = np.column_stack([right, nose, np.cross(right, nose)])  # keep it a true rotation
         self._attitude, self._attitude_time = shown, now
         flaps_moved = self._swing_flaps(tel.flap_folds_deg, now)
+        glow = self._ease_glow(tel.heat_glow, now)
+        if glow != self._glow_drawn:
+            flaps_moved = True  # a new picture is needed for the glow as well
         if self._attitude_drawn is not None:
             last, last_step, last_booster, picture = self._attitude_drawn
             if not flaps_moved and last_step == step and last_booster == booster_only and float(np.abs(last - shown).max()) < ATTITUDE_REDRAW_DELTA:
                 return picture  # it has not moved enough to show: keep the picture
-        picture = self._renderer.render_matrix(shown, separation, booster_only)
+        picture = self._renderer.render_matrix(shown, separation, booster_only, glow)
+        self._glow_drawn = glow
         self._attitude_drawn = (shown, step, booster_only, picture)
         return picture
 

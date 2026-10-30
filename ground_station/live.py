@@ -49,4 +49,5 @@ def live_telemetry(clock: CountdownClock, status: ReaderStatus) -> Telemetry:
         booster_live=sample.booster_live,
         on_booster=sample.has_booster_cluster,
         flap_folds_deg=sample.flap_folds_deg,
+        heat_glow=sample.heat_glow,
     )

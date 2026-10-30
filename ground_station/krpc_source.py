@@ -17,6 +17,7 @@ from . import sep_cluster
 from .booster import BoosterTracker
 from .branding import KRPC_CLIENT_NAME
 from .flaps import FlapTracker
+from .heating import glow_target
 from .attitude import attitude_from_rotation
 
 STALE_AFTER_SECONDS = 1.0
@@ -73,6 +74,7 @@ class LiveSample:
     booster_altitude_m: float | None = None
     booster_live: bool = False
     has_booster_cluster: bool = False  # the vessel being flown carries the booster's engine cluster (the stack, or the booster itself)
+    heat_glow: float = 0.0  # how strongly the ship's heat shield should glow on re-entry, 0..1 (heating.py)
     flap_folds_deg: tuple[float, ...] | None = None  # how far in each of the ship's four flaps is folded from deployed (see flaps.py); None = not known
 
 
@@ -161,6 +163,8 @@ class _Streams:
         self.warp_rate = conn.add_stream(getattr, conn.space_center, "warp_rate")
         self.speed = conn.add_stream(getattr, flight, "speed")
         self.altitude_surface = conn.add_stream(getattr, flight, "surface_altitude")  # above the ground/sea
+        self.dynamic_pressure = conn.add_stream(getattr, flight, "dynamic_pressure")  # for the re-entry glow
+        self.vertical_speed = conn.add_stream(getattr, flight, "vertical_speed")
         self.altitude_sea = conn.add_stream(getattr, flight, "mean_altitude")  # above sea level
         self.rotation = conn.add_stream(vessel.rotation, vessel.surface_reference_frame)
         self.latitude = conn.add_stream(getattr, flight, "latitude")
@@ -314,6 +318,13 @@ class _Streams:
             self._extras = (nodes, reentry, landing)
         return self._extras
 
+    def _heat_glow(self, speed: float) -> float:
+        """The re-entry glow's target: 0 where the game will not say (it is a decoration, never worth failing a reading for)."""
+        try:
+            return glow_target(self.dynamic_pressure(), speed, self.vertical_speed())
+        except Exception:
+            return 0.0
+
     def read(self, now: float) -> LiveSample:
         amount = sum(a() for a, _ in self.fuel)
         capacity = sum(m() for _, m in self.fuel)
@@ -339,9 +350,10 @@ class _Streams:
         ut = self.ut()
         nodes, reentry_ut, landing_ut = self._read_extras(now, ut)
         apoapsis, periapsis = self.apoapsis(), self.periapsis()
+        speed = self.speed()
         return LiveSample(
             met=self.met(),
-            speed_ms=self.speed(),
+            speed_ms=speed,
             altitude_m=self.altitude_sea() if self._altitude_mode() == "sea" else self.altitude_surface(),
             fuel_fraction=(amount / capacity) if capacity > 0 else 0.0,
             pitch_deg=pitch,
@@ -364,6 +376,7 @@ class _Streams:
             thrust_n=thrust,
             max_thrust_n=rated if rated else None,
             throttle=self.throttle(),
+            heat_glow=self._heat_glow(speed),
             situation=str(getattr(self.situation(), "name", self.situation())),
             received_at=now,
         )

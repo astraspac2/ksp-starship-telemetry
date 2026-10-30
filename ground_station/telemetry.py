@@ -30,6 +30,7 @@ class Telemetry:
     booster_altitude_km: float | None = None
     booster_live: bool = False  # the booster's numbers are being read; once False they are gone for good
     on_booster: bool = False  # the vessel being flown carries the booster's engines: with the separation seen, that is the booster itself
+    heat_glow: float = 0.0  # how strongly the ship's heat shield glows on re-entry, 0..1
     flap_folds_deg: tuple[float, ...] | None = None  # how far in each of the ship's four flaps is folded from deployed; None = not known, drawn as built
 
 

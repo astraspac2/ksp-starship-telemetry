@@ -548,6 +548,7 @@ class ControlPanel(QMainWindow):
         self._show_bar = QCheckBox("Show the telemetry bar")
         self._timeline_check = QCheckBox("Show the event timeline along the bar")
         self._map_check = QCheckBox("Show the map in place of the engine dial (flight view)")
+        self._glow_check = QCheckBox("Glow the ship's heat shield on re-entry (3D dial)")
         self._panels_check = QCheckBox("Show the side panels (gauges, engine cluster and dial) of the flight bar")
         self._panels_check.setToolTip("Turn off and they sink away the way they rose at the start; turn on and they rise again the same way.")
         for checkbox in (
@@ -559,6 +560,7 @@ class ControlPanel(QMainWindow):
             self._timeline_check,
             self._map_check,
             self._panels_check,
+            self._glow_check,
         ):
             checkbox.toggled.connect(self._store_hud)
             form.addRow(checkbox)
@@ -865,6 +867,7 @@ class ControlPanel(QMainWindow):
         self._badge_check.setChecked(s.show_badge)
         self._map_check.setChecked(s.show_map)
         self._panels_check.setChecked(s.show_panels)
+        self._glow_check.setChecked(s.reentry_glow)
         self._show_pill.setChecked(s.show_pill)
         self._show_bar.setChecked(s.show_bar)
         self._timeline_check.setChecked(s.show_timeline)
@@ -996,6 +999,7 @@ class ControlPanel(QMainWindow):
         s.show_badge = self._badge_check.isChecked()
         s.show_map = self._map_check.isChecked()
         s.show_panels = self._panels_check.isChecked()
+        s.reentry_glow = self._glow_check.isChecked()
         s.show_pill = self._show_pill.isChecked()
         s.show_bar = self._show_bar.isChecked()
         s.show_timeline = self._timeline_check.isChecked()
