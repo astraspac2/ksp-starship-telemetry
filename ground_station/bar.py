@@ -86,6 +86,8 @@ ATTITUDE_RESET_SECONDS = 0.5  # after a pause this long (the dial was hidden) it
 ATTITUDE_REDRAW_DELTA = 0.0015  # about a tenth of a degree
 FLAP_SPEED = 45.0  # degrees a second the dial's flaps swing at, toward what the game reports
 FLAP_STOWED_FOLDS = (0.0,) * 4  # the flaps drawn before the game has said anything: straight out sideways, as the ship stands on the pad
+FLICKER_HZ = 9.0  # how often the hot shield's flicker changes (every new picture of the model costs a few tens of milliseconds)
+FLICKER_FROM = 0.12  # the glow it takes before the shield flickers
 GLOW_STEP = 0.04  # the re-entry glow is redrawn in steps of this much
 FLAP_STEP = 3.0  # the flaps are redrawn in steps of this many degrees (each new picture of the model costs a few tens of milliseconds)
 DOT_FADE_SECONDS = 0.12  # an engine dot closes about two thirds of the way to lit or dim in this long
@@ -160,6 +162,7 @@ class TelemetryBar(HudWindow):
         self._reentry_glow = True
         self._glow_shown = 0.0  # the re-entry glow as drawn, easing toward the game's
         self._glow_drawn = 0.0
+        self._flicker_drawn = 0
         self._glow_time = 0.0
         self._flap_shown: tuple[float, ...] | None = None  # the folds of the four flaps as drawn, easing toward the game's
         self._flap_time = 0.0
@@ -361,14 +364,15 @@ class TelemetryBar(HudWindow):
         self._attitude, self._attitude_time = shown, now
         flaps_moved = self._swing_flaps(tel.flap_folds_deg, now)
         glow = self._ease_glow(tel.heat_glow, now)
-        if glow != self._glow_drawn:
+        flicker = int(now * FLICKER_HZ) if glow >= FLICKER_FROM else 0  # a new tick now and then, once the shield is hot enough to flicker
+        if glow != self._glow_drawn or flicker != self._flicker_drawn:
             flaps_moved = True  # a new picture is needed for the glow as well
         if self._attitude_drawn is not None:
             last, last_step, last_booster, picture = self._attitude_drawn
             if not flaps_moved and last_step == step and last_booster == booster_only and float(np.abs(last - shown).max()) < ATTITUDE_REDRAW_DELTA:
                 return picture  # it has not moved enough to show: keep the picture
-        picture = self._renderer.render_matrix(shown, separation, booster_only, glow)
-        self._glow_drawn = glow
+        picture = self._renderer.render_matrix(shown, separation, booster_only, glow, flicker)
+        self._glow_drawn, self._flicker_drawn = glow, flicker
         self._attitude_drawn = (shown, step, booster_only, picture)
         return picture
 

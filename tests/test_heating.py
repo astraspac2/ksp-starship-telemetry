@@ -90,3 +90,51 @@ def test_the_dial_draws_the_glow_only_when_asked_and_eases_it(qapp, monkeypatch)
         clock[0] += 0.25
         bar._rocket_image(bar._telemetry)
     assert bar._glow_shown == 0.0 and GLOW_STEP > 0
+
+
+def alpha_outside_the_ship(image, cold_image):
+    """How much of the picture is lit where the ship itself is not."""
+    def alpha(img):
+        img = img.convertToFormat(renderer_format())
+        return np.frombuffer(img.constBits(), dtype=np.uint8).reshape(img.height(), img.width(), 4)[:, :, 3].astype(float)
+
+    outside = alpha(cold_image) == 0
+    return float(alpha(image)[outside].sum())
+
+
+def test_a_glowing_shield_has_a_halo_round_it_and_a_cold_one_has_none(qapp):
+    renderer = ModelRenderer(starship_stack(), 200)
+    axes = body_to_world(75, 20, 0)
+    cold = renderer.render_matrix(axes, 1.0, False, 0.0)
+    hot = renderer.render_matrix(axes, 1.0, False, 0.9)
+    assert alpha_outside_the_ship(cold, cold) == 0.0
+    assert alpha_outside_the_ship(hot, cold) > 2000.0  # light spills past the ship's outline
+
+
+def test_the_shield_flickers_from_tick_to_tick_but_a_tick_always_looks_the_same(qapp):
+    renderer = ModelRenderer(starship_stack(), 200)
+    axes = body_to_world(75, 20, 0)
+    first = renderer.render_matrix(axes, 1.0, False, 0.8, 4)
+    again = renderer.render_matrix(axes, 1.0, False, 0.8, 4)
+    other = renderer.render_matrix(axes, 1.0, False, 0.8, 5)
+    steady = renderer.render_matrix(axes, 1.0, False, 0.8, 0)
+    assert first == again and first != other and first != steady
+
+
+def test_the_dial_redraws_for_a_new_flicker_tick_only_while_the_shield_is_hot_enough(qapp, monkeypatch):
+    from ground_station.bar import FLICKER_FROM, FLICKER_HZ
+
+    clock = [100.0]
+    monkeypatch.setattr("ground_station.bar.time.monotonic", lambda: clock[0])
+    base = dataclasses.replace(mock_telemetry(300.0, 143.0), separated_at=143.0, heading_deg=90.0, pitch_deg=60.0, roll_deg=0.0)
+    bar = TelemetryBar()
+    bar.set_telemetry(dataclasses.replace(base, heat_glow=0.0))
+    picture = bar._rocket_image(bar._telemetry)
+    clock[0] += 1.0
+    assert bar._rocket_image(bar._telemetry) is picture  # cold: nothing changes
+    bar._glow_shown = 0.5
+    bar.set_telemetry(dataclasses.replace(base, heat_glow=0.5))
+    first = bar._rocket_image(bar._telemetry)
+    clock[0] += 1.0 / FLICKER_HZ + 0.01
+    assert bar._rocket_image(bar._telemetry) is not first  # hot: a new tick, a new picture
+    assert FLICKER_FROM < 0.5

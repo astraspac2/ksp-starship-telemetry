@@ -16,6 +16,10 @@ from .attitude import VIEW_AZIMUTH_DEG, VIEW_ELEVATION_DEG, nose_direction
 from .mesh import Mesh
 
 SUPERSAMPLE = 2
+FLICKER_PATCHES = 48  # the heat shield flickers in this many patches, each on its own
+FLICKER_DEPTH = 0.30  # how far a patch's glow strays from the steady value at full glow
+AURA_SPREAD = 22  # the glow's halo reaches about a twenty-second of the picture's width: the glowing pixels, blurred by shrinking and growing the picture
+AURA_STRENGTH = 0.85
 STACK_SPLIT_Y = 0.05  # model height (the model is centred, one unit long) above which the stack is the ship and below it the booster
 BOOSTER_BACK = 0.9  # how far (in model lengths) the booster drops away during the separation animation
 SHIP_SHARE_OF_DIAL = 0.6  # the lone ship ends up this long compared with the whole stack before separation
@@ -89,6 +93,9 @@ class ModelRenderer:
         self._gloss = mesh.face_gloss.astype(np.float64) if mesh.face_gloss is not None else np.zeros(len(mesh.faces))
         self._lift = mesh.face_lift.astype(np.float64) if mesh.face_lift is not None else np.zeros(len(mesh.faces))
         self._heat = mesh.face_heat.astype(np.float64) if mesh.face_heat is not None else np.zeros(len(mesh.faces))
+        centre = self._vertices[self._faces].mean(axis=1)  # which patch of the shield a face is in, for the flicker: bands down the ship, then round it
+        turn = ((np.arctan2(centre[:, 2], centre[:, 0]) + np.pi) / (2 * np.pi) * 8).astype(int) % 8
+        self._patch = (np.floor((centre[:, 1] + 0.5) * 60).astype(int) * 8 + turn) % FLICKER_PATCHES
         self._colours = mesh.face_colors if mesh.face_colors is not None else np.tile(BASE_COLOUR, (len(mesh.faces), 1))
         self.size_px = size_px
         self._cache: dict[tuple[int, int, int, int], QImage] = {}
@@ -185,17 +192,19 @@ class ModelRenderer:
         keep = np.arange(len(self._faces)) if step < PROGRESS_STEPS else np.flatnonzero(~self._is_booster)
         return corners, keep
 
-    def render_matrix(self, axes: np.ndarray, separation: float = 0.0, booster_only: bool = False, glow: float = 0.0) -> QImage:
+    def render_matrix(
+        self, axes: np.ndarray, separation: float = 0.0, booster_only: bool = False, glow: float = 0.0, flicker: int = 0
+    ) -> QImage:
         """The model for an exact orientation (columns: right, nose, top in east/north/up), without rounding to a degree.
 
         For a smoothly turning dial; nothing is cached, so call it only when the orientation has really changed.
         """
-        return self._draw_matrix(axes, round(min(max(separation, 0.0), 1.0) * PROGRESS_STEPS), booster_only, glow)
+        return self._draw_matrix(axes, round(min(max(separation, 0.0), 1.0) * PROGRESS_STEPS), booster_only, glow, flicker)
 
     def _draw(self, pitch: float, heading: float, roll: float, step: int = 0) -> QImage:
         return self._draw_matrix(body_to_world(pitch, heading, roll), step)
 
-    def _draw_matrix(self, axes: np.ndarray, step: int, booster_only: bool = False, glow: float = 0.0) -> QImage:
+    def _draw_matrix(self, axes: np.ndarray, step: int, booster_only: bool = False, glow: float = 0.0, flicker: int = 0) -> QImage:
         corners, keep = self._stage_triangles(step, booster_only)
         world = corners[keep].reshape(-1, 3) @ axes.T
         view = world @ self._view.T  # x right, y up, z away from the viewer
@@ -251,7 +260,12 @@ class ModelRenderer:
             glint = np.clip(normal @ half, 0.0, 1.0) ** HIGHLIGHT_SHARPNESS * gloss * HIGHLIGHT_STRENGTH
             lit = lit + glint[:, None]
         if glow > 0.0:  # the re-entry glow: the heat shield's tiles give light of their own, less toward the edge of the ship
-            weight = np.clip(self._heat[keep] * glow * 1.3 * (0.7 + 0.3 * np.abs(normal[:, 2])), 0.0, 1.0)[:, None]
+            strength = self._heat[keep] * glow * 1.3 * (0.7 + 0.3 * np.abs(normal[:, 2]))
+            if flicker:  # small light flickers: each patch of the shield brightens and dims on its own, tick after tick
+                now = np.random.default_rng(flicker).uniform(-1.0, 1.0, FLICKER_PATCHES)
+                before = np.random.default_rng(flicker - 1).uniform(-1.0, 1.0, FLICKER_PATCHES)
+                strength = strength * (1.0 + FLICKER_DEPTH * glow * (0.65 * now + 0.35 * before)[self._patch[keep]])
+            weight = np.clip(strength, 0.0, 1.0)[:, None]
             lit = lit * (1.0 - weight) + glow_colour(glow)[None, :] * weight * (0.8 + 0.2 * shade[:, None])
         colours = np.clip(lit, 0.0, 1.0)
         previous = None
@@ -274,4 +288,25 @@ class ModelRenderer:
             mask.setPen(Qt.NoPen)
             mask.drawEllipse(QPointF(side / 2, side / 2), side / 2, side / 2)
             mask.end()
+        if glow > 0.05:
+            image = self._add_aura(image, glow)
         return image
+
+    @staticmethod
+    def _add_aura(image: QImage, glow: float) -> QImage:
+        """A soft halo of the glow's colour round the glowing parts, so the shield gives off light and not only looks lit."""
+        width, height = image.width(), image.height()
+        image = image.convertToFormat(QImage.Format_ARGB32_Premultiplied)
+        pixels = np.frombuffer(image.constBits(), dtype=np.uint8).reshape(height, width, 4).astype(np.float64) / 255.0  # B, G, R, A
+        hot = np.clip((pixels[:, :, 2] - pixels[:, :, 0] - 0.12) * 2.5, 0.0, 1.0)  # the red, orange and white-hot pixels: redder than blue, which steel never is
+        grey = QImage((hot * 255).astype(np.uint8).copy().data, width, height, width, QImage.Format_Grayscale8).copy()
+        shrink = max(width // AURA_SPREAD, 2)
+        small = grey.scaled(max(width // shrink, 1), max(height // shrink, 1), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+        blurred = small.scaled(width, height, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+        halo = np.frombuffer(blurred.constBits(), dtype=np.uint8).reshape(height, blurred.bytesPerLine())[:, :width].astype(np.float64) / 255.0
+        halo = halo * (1.0 - 0.7 * hot) * AURA_STRENGTH * min(glow * 1.4, 1.0)  # mostly outside the ship: on it the tiles' own light is already there
+        colour = glow_colour(glow)[::-1]  # B, G, R
+        pixels[:, :, :3] = np.clip(pixels[:, :, :3] + halo[:, :, None] * colour[None, None, :], 0.0, 1.0)
+        pixels[:, :, 3] = np.clip(pixels[:, :, 3] + halo, 0.0, 1.0)
+        data = (pixels * 255.0 + 0.5).astype(np.uint8).copy()
+        return QImage(data.data, width, height, width * 4, QImage.Format_ARGB32_Premultiplied).copy()
