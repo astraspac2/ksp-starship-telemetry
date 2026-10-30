@@ -12,6 +12,7 @@ from .fonts import load_bundled_fonts
 from .panel import ControlPanel, place_on_second_screen
 from .pill import MARGIN as PILL_MARGIN
 from .pill import PillWidget
+from .resolution import resolution_scale
 from .session import Session
 from .single_instance import acquire_or_explain
 from .staging_trace import StagingTrace
@@ -70,10 +71,15 @@ class GroundStationApp:
     def _preview(self) -> QPixmap | None:
         return self.bar.grab() if self.session.settings.show_bar else None
 
+    def _hud_scale(self) -> float:
+        """The HUD scale setting times what the monitor's resolution asks for (the HUD is drawn for a 1920-wide screen)."""
+        s = self.session.settings
+        return s.hud_scale * resolution_scale(s.resolution, self.app.primaryScreen().geometry().width())
+
     def _place_windows(self) -> None:
         screen = self.app.primaryScreen().geometry()  # the whole screen, not the part above the taskbar
         (pill_x, pill_y), (bar_x, bar_y) = hud_positions(
-            screen.left(), screen.top(), screen.width(), screen.height(), self.bar.width(), self.bar.height(), self.session.settings.hud_scale,
+            screen.left(), screen.top(), screen.width(), screen.height(), self.bar.width(), self.bar.height(), self._hud_scale(),
             corner=self.session.pad_mode,
         )
         self.pill.move(pill_x, pill_y)
@@ -85,7 +91,8 @@ class GroundStationApp:
         background = s.background_color if s.background == "solid" else None
 
         self.pill.set_subtitle(s.mission_label)
-        self.pill.set_scale(s.hud_scale)
+        scale = self._hud_scale()
+        self.pill.set_scale(scale)
         self.pill.set_font_override(s.font)
         self.pill.set_background(background)
         self.pill.set_window_options(s.on_top, s.click_through)
@@ -96,7 +103,7 @@ class GroundStationApp:
         self.bar.set_thrust_unit(s.thrust_unit)
         self.bar.set_view_mode(s.view_mode)
         self.bar.set_milestones(self.session.milestones())
-        self.bar.set_scale(s.hud_scale)
+        self.bar.set_scale(scale)
         self.bar.set_ship_scale(s.ship_scale)
         self.bar.set_background(background)
         self.bar.set_badge(s.show_badge)
@@ -108,9 +115,9 @@ class GroundStationApp:
         if problem:
             self.panel.statusBar().showMessage(f"The 3D model could not be used, so the built-in rocket is shown: {problem}")
 
-        if self._scale_placed != (s.hud_scale, s.view_mode):  # only reposition when the size changes, so a dragged HUD stays put
+        if self._scale_placed != (scale, s.view_mode):  # only reposition when the size changes, so a dragged HUD stays put
             self._place_windows()
-            self._scale_placed = (s.hud_scale, s.view_mode)
+            self._scale_placed = (scale, s.view_mode)
         self.pill.setVisible(pill_visible(s.show_pill, s.view_mode))
         self.bar.setVisible(s.show_bar)
         self.display_timer.setInterval(round(1000 / s.refresh_hz))

@@ -9,6 +9,7 @@ from pathlib import Path
 from .branding import DEFAULT_FLIGHT_LABEL, DEFAULT_PAD_LABEL, SETTINGS_FOLDER
 from .auto_markers import auto_markers_from_dicts, auto_markers_to_dicts
 from .events import DEFAULT_EVENTS, DEFAULT_PAD_EVENTS, events_from_dicts, events_to_dicts
+from .resolution import CHOICES as RESOLUTION_CHOICES
 from .units import ALTITUDE_UNITS, SPEED_UNITS, THRUST_UNITS
 
 REFRESH_HZ = (20, 30, 60)
@@ -54,6 +55,7 @@ class Settings:
     accent: str = ""  # "" = the look's own accent, else "#RRGGBB"
     panel_opacity: float | None = None  # None = the look's own; else 0..1 for the plates behind the gauges
     hud_scale: float = 1.0
+    resolution: str = "auto"  # the monitor's resolution the HUD is scaled to (resolution.py): "auto" takes the screen it is on
     show_panels: bool = True  # the side panels (gauges, engine cluster and dial) of the flight bar; off, they sink away
     flap_roll: bool = True  # the ship's flaps in the 3D dial follow the roll input
     flap_yaw: bool = True  # and the yaw input (deploy, retract and pitch always show)
@@ -118,6 +120,7 @@ class Settings:
             ("view_mode", VIEW_MODES),
             ("altitude_mode", ALTITUDE_MODES),
             ("background", BACKGROUNDS),
+            ("resolution", RESOLUTION_CHOICES),
         ):
             one_of(name, allowed)
         within("rpc_port", 1, 65535)

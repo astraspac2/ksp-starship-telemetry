@@ -46,6 +46,8 @@ from .krpc_source import EXPECTED_KRPC_VERSION, ConnState
 from .mesh import ModelError, load_prepared
 from .panel_backdrops import BACKDROP_THEMES, render_backdrop
 from .mock_game import WARP_RATES
+from .resolution import CHOICES as RESOLUTION_CHOICES
+from .resolution import label as resolution_label
 from .session import Session
 from .settings import ALTITUDE_MODES, BACKGROUNDS, PANEL_THEMES, REFRESH_HZ, VIEW_MODES, WARP_POLICIES
 from .source import DataSource
@@ -498,6 +500,14 @@ class ControlPanel(QMainWindow):
         self._scale.setDecimals(2)
         self._scale.valueChanged.connect(self._store_hud)
         form.addRow("HUD scale", self._scale)
+        self._resolution = QComboBox()
+        self._resolution.addItems([resolution_label(c) for c in RESOLUTION_CHOICES])
+        self._resolution.setToolTip(
+            "The monitor resolution the HUD is scaled to, so it spans the same share of the screen on any monitor. Automatic follows "
+            "the screen it is on. HUD scale above still fine-tunes the size."
+        )
+        self._resolution.currentIndexChanged.connect(self._store_hud)
+        form.addRow("Screen resolution", self._resolution)
         self._ship_scale = QDoubleSpinBox()
         self._ship_scale.setRange(0.5, 2.0)
         self._ship_scale.setSingleStep(0.05)
@@ -843,6 +853,7 @@ class ControlPanel(QMainWindow):
         self._thrust_unit.setCurrentIndex(THRUST_UNITS.index(s.thrust_unit))
         self._refresh_rate.setCurrentIndex(REFRESH_HZ.index(s.refresh_hz))
         self._scale.setValue(s.hud_scale)
+        self._resolution.setCurrentIndex(RESOLUTION_CHOICES.index(s.resolution))
         self._ship_scale.setValue(s.ship_scale)
         self._flap_roll.setChecked(s.flap_roll)
         self._flap_yaw.setChecked(s.flap_yaw)
@@ -975,6 +986,7 @@ class ControlPanel(QMainWindow):
         s.thrust_unit = THRUST_UNITS[self._thrust_unit.currentIndex()]
         s.refresh_hz = REFRESH_HZ[self._refresh_rate.currentIndex()]
         s.hud_scale = round(self._scale.value(), 2)
+        s.resolution = RESOLUTION_CHOICES[self._resolution.currentIndex()]
         s.ship_scale = round(self._ship_scale.value(), 2)
         self._session.set_flap_axes(self._flap_roll.isChecked(), self._flap_yaw.isChecked())
         s.font = "" if self._font.currentIndex() == 0 else self._font.currentText()
