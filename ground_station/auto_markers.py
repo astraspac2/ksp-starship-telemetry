@@ -4,9 +4,9 @@ Two kinds:
   node     a maneuver node planned in KSP. Once it has stayed put for a moment the operator is asked to name it, and it
            goes on the timeline at the moment it will happen (now plus the time left on the node). While the node is
            being dragged the marker follows it.
-  reentry  RE-ENTRY, when the vessel comes down through 30 km. It only works after the vessel has been above 30 km
+  reentry  RE-ENTRY, when the vessel comes down through 70 km. It only works after the vessel has been above 30 km
            (so a suborbital flight counts, a low hop does not). Once the path dips into the atmosphere the marker is
-           placed at the predicted moment, and when 30 km is really crossed on the way down it is set to that moment.
+           placed at the predicted moment, and when 70 km is really crossed on the way down it is set to that moment.
 
   landing  LANDING BURN, when the vessel coming down passes 800 m (above the ground, or above sea level if that is the chosen
            altitude). It only works after the vessel has been above 50 km. The marker
@@ -28,7 +28,8 @@ from typing import Sequence
 NODE_STABLE_SECONDS = 2.0  # a new node must stay unchanged this long (wall time) before the operator is asked about it
 NODE_MATCH_SECONDS = 900.0  # a node that moved less than this between two readings is still the same node
 NODE_MOVED_SECONDS = 0.05  # smaller shifts are rounding noise
-REENTRY_ALTITUDE_KM = 30.0  # the marker arms once the vessel is above this, and is set when it comes back down through it
+REENTRY_ARM_KM = 30.0  # the marker arms once the vessel is above this
+REENTRY_ALTITUDE_KM = 70.0  # and is set when it comes back down through this height
 REENTRY_NAME = "Re-entry"
 REENTRY_MOVED_SECONDS = 0.5
 
@@ -209,6 +210,7 @@ class AutoMarkerTracker:
         self._candidate: float | None = None
         self._candidate_since = 0.0
         self._armed = False
+        self._crossed = False  # the crossing is done; no new arming until the vessel is back below the arming height
         self._suppressed = False  # the operator deleted the marker; leave it deleted
         self._reentry: AutoMarker | None = None
         self._last_altitude: float | None = None
@@ -227,7 +229,7 @@ class AutoMarkerTracker:
         self.pending = None
         self._declined.clear()
         self._candidate = None
-        self._armed = self._suppressed = False
+        self._armed = self._suppressed = self._crossed = False
         self._reentry = None
         self._last_altitude = None
         self._landing_armed = self._landing_suppressed = False
@@ -316,15 +318,17 @@ class AutoMarkerTracker:
         if self._reentry is not None and self._reentry not in self.markers:
             self._reentry, self._suppressed = None, True  # taken off the list by the operator
         known = altitude_km is not None and math.isfinite(altitude_km)
-        if known and altitude_km > REENTRY_ALTITUDE_KM and not self._armed:  # every climb above 30 km is a new flight
+        if known and altitude_km < REENTRY_ARM_KM:
+            self._armed = self._crossed = False  # back low: the next climb is a new flight
+        if known and altitude_km > REENTRY_ARM_KM and not self._armed and not self._crossed:  # every climb above 30 km is a new flight
             self._armed, self._suppressed = True, False
         falling = altitude_km is not None and self._last_altitude is not None and altitude_km < self._last_altitude
         previous, self._last_altitude = self._last_altitude, altitude_km
         if not self._armed:
             return
-        if altitude_km is not None and previous is not None and altitude_km <= REENTRY_ALTITUDE_KM and falling:
-            self._place_reentry(t)  # 30 km crossed on the way down
-            self._armed = False
+        if altitude_km is not None and previous is not None and previous > REENTRY_ALTITUDE_KM >= altitude_km and falling:
+            self._place_reentry(t)  # 70 km crossed on the way down
+            self._armed, self._crossed = False, True
         elif reentry_ut is not None and reentry_ut > ut:
             self._place_reentry(t + (reentry_ut - ut))  # the orbit now dips into the atmosphere
 
