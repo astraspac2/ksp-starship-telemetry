@@ -6,10 +6,11 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QApplication
 
-from .branding import BAR_TITLE, PILL_TITLE
+from .branding import OVERLAY_TITLE
 from . import settings as settings_io
 from .bar import TelemetryBar
 from .fonts import load_bundled_fonts
+from .overlay import OverlayWindow
 from .panel import ControlPanel, place_on_second_screen
 from .pill import MARGIN as PILL_MARGIN
 from .pill import PillWidget
@@ -56,8 +57,8 @@ class GroundStationApp:
         )
         self.pill = PillWidget(subtitle=self.session.settings.mission_label)
         self.bar = TelemetryBar(subtitle=self.session.settings.mission_label, milestones=self.session.milestones())
-        self.pill.setWindowTitle(PILL_TITLE)
-        self.bar.setWindowTitle(BAR_TITLE)
+        self.overlay = OverlayWindow(OVERLAY_TITLE)  # the pill and the bar are parts of this one window
+        self.overlay.adopt(self.pill, self.bar)
         self._scale_placed = None  # the HUD scale and view the windows were last positioned for
         self.display_timer = QTimer()
         self.display_timer.timeout.connect(self.tick)
@@ -85,8 +86,9 @@ class GroundStationApp:
             screen.left(), screen.top(), screen.width(), screen.height(), self.bar.width(), self.bar.height(), self._hud_scale(),
             corner=self.session.pad_mode,
         )
-        self.pill.move(pill_x, pill_y)
-        self.bar.move(bar_x, bar_y)
+        self.overlay.cover(screen.left(), screen.top(), screen.width(), screen.height())
+        self.pill.move(pill_x - screen.left(), pill_y - screen.top())  # inside the overlay, which starts at the screen's corner
+        self.bar.move(bar_x - screen.left(), bar_y - screen.top())
 
     def apply_display(self) -> None:
         s = self.session.settings
@@ -98,7 +100,8 @@ class GroundStationApp:
         self.pill.set_scale(scale)
         self.pill.set_font_override(s.font)
         self.pill.set_background(background)
-        self.pill.set_window_options(s.on_top, s.click_through)
+        self.overlay.set_background(background)
+        self.overlay.set_window_options(s.on_top, s.click_through)
 
         self.bar.set_subtitle(s.mission_label)
         self.bar.set_theme(theme)
@@ -114,7 +117,6 @@ class GroundStationApp:
         self.bar.set_show_panels(s.show_panels)
         self.bar.set_reentry_glow(s.reentry_glow)
         self.bar.set_timeline(s.show_timeline, s.timeline_nodes)
-        self.bar.set_window_options(s.on_top, s.click_through)
         problem = self.bar.set_vessel_model(s.vessel_model, s.vessel_model_flip, s.starship_model)
         if problem:
             self.panel.statusBar().showMessage(f"The 3D model could not be used, so the built-in rocket is shown: {problem}")
@@ -124,6 +126,7 @@ class GroundStationApp:
             self._scale_placed = (scale, s.view_mode)
         self.pill.setVisible(pill_visible(s.show_pill, s.view_mode))
         self.bar.setVisible(s.show_bar)
+        self.overlay.setVisible(self.pill.isVisibleTo(self.overlay) or self.bar.isVisibleTo(self.overlay))
         self.display_timer.setInterval(round(1000 / s.refresh_hz))
 
     def tick(self) -> None:
