@@ -6,6 +6,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QApplication
 
+from .branding import BAR_TITLE, PILL_TITLE
 from . import settings as settings_io
 from .bar import TelemetryBar
 from .fonts import load_bundled_fonts
@@ -55,6 +56,8 @@ class GroundStationApp:
         )
         self.pill = PillWidget(subtitle=self.session.settings.mission_label)
         self.bar = TelemetryBar(subtitle=self.session.settings.mission_label, milestones=self.session.milestones())
+        self.pill.setWindowTitle(PILL_TITLE)
+        self.bar.setWindowTitle(BAR_TITLE)
         self._scale_placed = None  # the HUD scale and view the windows were last positioned for
         self.display_timer = QTimer()
         self.display_timer.timeout.connect(self.tick)

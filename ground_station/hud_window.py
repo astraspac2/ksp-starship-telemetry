@@ -25,7 +25,7 @@ class HudWindow(QWidget):
             self.show()  # changing window flags hides the window, so bring it back
 
     def _apply_flags(self) -> None:
-        flags = Qt.FramelessWindowHint | Qt.Tool
+        flags = Qt.FramelessWindowHint | Qt.Window  # an ordinary window (not a tool window), so OBS lists it for Window Capture
         if self._on_top:
             flags |= Qt.WindowStaysOnTopHint
         if self._click_through:
