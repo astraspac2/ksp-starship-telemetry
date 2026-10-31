@@ -4,12 +4,12 @@ Two kinds:
   node     a maneuver node planned in KSP. Once it has stayed put for a moment the operator is asked to name it, and it
            goes on the timeline at the moment it will happen (now plus the time left on the node). While the node is
            being dragged the marker follows it.
-  reentry  RE-ENTRY, when the vessel comes down through 70 km. It only works after the vessel has been above 70 km
+  reentry  RE-ENTRY, when the vessel comes down through 30 km. It only works after the vessel has been above 30 km
            (so a suborbital flight counts, a low hop does not). Once the path dips into the atmosphere the marker is
-           placed at the predicted moment, and when 70 km is really crossed on the way down it is set to that moment.
+           placed at the predicted moment, and when 30 km is really crossed on the way down it is set to that moment.
 
   landing  LANDING BURN, when the vessel coming down passes 800 m (above the ground, or above sea level if that is the chosen
-           altitude). Like re-entry it only works after the vessel has been above 70 km. The marker
+           altitude). It only works after the vessel has been above 50 km. The marker
            appears when the vessel has come down to 25 km, placed at the predicted moment (from how fast it is sinking
            and how the air slows it, or from the orbit for the first moments), kept up to date as it comes down, and
            when 800 m is really crossed it is set to that moment.
@@ -28,7 +28,7 @@ from typing import Sequence
 NODE_STABLE_SECONDS = 2.0  # a new node must stay unchanged this long (wall time) before the operator is asked about it
 NODE_MATCH_SECONDS = 900.0  # a node that moved less than this between two readings is still the same node
 NODE_MOVED_SECONDS = 0.05  # smaller shifts are rounding noise
-REENTRY_ALTITUDE_KM = 70.0  # the marker arms once the vessel is above this, and is set when it comes back down through it
+REENTRY_ALTITUDE_KM = 30.0  # the marker arms once the vessel is above this, and is set when it comes back down through it
 REENTRY_NAME = "Re-entry"
 REENTRY_MOVED_SECONDS = 0.5
 
@@ -36,7 +36,7 @@ LATE_MARKER_KINDS = ("reentry", "landing")
 LATE_MARKER_VISIBLE_FROM = 600.0  # these two stay off the timeline until the flight clock reaches T+00:10:00
 
 LANDING_BURN_ALTITUDE_M = 800.0  # Starship lights its engines for the landing burn at about this height
-LANDING_ARM_KM = REENTRY_ALTITUDE_KM  # arms like the re-entry marker: only flights that got above 70 km
+LANDING_ARM_KM = 50.0  # arms once the vessel has been above this: only flights that got above 50 km
 LANDING_SHOW_KM = 25.0  # the marker only appears once the vessel is this low on the way down
 LANDING_NAME = "Landing burn"
 LANDING_MOVED_SECONDS = 0.5
@@ -316,14 +316,14 @@ class AutoMarkerTracker:
         if self._reentry is not None and self._reentry not in self.markers:
             self._reentry, self._suppressed = None, True  # taken off the list by the operator
         known = altitude_km is not None and math.isfinite(altitude_km)
-        if known and altitude_km > REENTRY_ALTITUDE_KM and not self._armed:  # every climb above 70 km is a new flight
+        if known and altitude_km > REENTRY_ALTITUDE_KM and not self._armed:  # every climb above 30 km is a new flight
             self._armed, self._suppressed = True, False
         falling = altitude_km is not None and self._last_altitude is not None and altitude_km < self._last_altitude
         previous, self._last_altitude = self._last_altitude, altitude_km
         if not self._armed:
             return
         if altitude_km is not None and previous is not None and altitude_km <= REENTRY_ALTITUDE_KM and falling:
-            self._place_reentry(t)  # 70 km crossed on the way down
+            self._place_reentry(t)  # 30 km crossed on the way down
             self._armed = False
         elif reentry_ut is not None and reentry_ut > ut:
             self._place_reentry(t + (reentry_ut - ut))  # the orbit now dips into the atmosphere
@@ -356,7 +356,7 @@ class AutoMarkerTracker:
         if altitude_km is None or not math.isfinite(altitude_km):
             return
         metres = altitude_km * 1000.0
-        if altitude_km > LANDING_ARM_KM and not self._landing_armed:  # every climb above 70 km is a new flight
+        if altitude_km > LANDING_ARM_KM and not self._landing_armed:  # every climb above 50 km is a new flight
             self._landing_armed, self._landing_suppressed = True, False
         previous = self._last_altitude
         if not self._landing_armed:
