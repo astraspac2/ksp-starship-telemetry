@@ -6,10 +6,10 @@ this). It is only for a vessel coming down, so the climb's max-Q does not light 
 """
 
 DESCENT_FROM = 30.0  # m/s of sinking before the shield may glow at all
-GLOW_STARTS = 2.0e6  # Pa * m/s: below this the shield stays dark
-GLOW_FULL = 3.0e7  # and by this it is white-hot
+GLOW_STARTS = 5.0e5  # Pa * m/s: below this the shield stays dark
+GLOW_FULL = 2.0e7  # and by this it is white-hot
 HEAT_RATE = 0.9  # per second: how fast the glow comes up when the heating rises
-COOL_RATE = 0.22  # per second: how slowly it cools again once the air thins out
+COOL_RATE = 0.7  # per second: how fast it cools again once the air thins out
 
 
 def glow_target(dynamic_pressure_pa: float | None, speed_ms: float | None, vertical_speed_ms: float | None) -> float:

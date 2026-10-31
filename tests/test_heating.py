@@ -27,7 +27,7 @@ def test_the_shield_stays_dark_in_thin_air_and_on_the_way_up():
 
 
 def test_the_glow_grows_with_the_heating_and_tops_out():
-    steps = [glow_target(q, 1500.0, -250.0) for q in (500.0, 2000.0, 6000.0, 12000.0, 40000.0)]
+    steps = [glow_target(q, 1500.0, -250.0) for q in (200.0, 2000.0, 6000.0, 12000.0, 40000.0)]
     assert steps == sorted(steps) and steps[0] == 0.0 and steps[-1] == 1.0
     assert glow_target(GLOW_STARTS / 1500.0, 1500.0, -250.0) == pytest.approx(0.0)
     assert glow_target(GLOW_FULL / 1500.0, 1500.0, -250.0) == pytest.approx(1.0)
