@@ -26,8 +26,8 @@ def test_arrangements_follow_the_marker():
     assert layout_for(-30, sep) is Layout.STAGE_1
     assert layout_for(137.9, sep) is Layout.STAGE_1
     assert layout_for(138.0, sep) is Layout.STAGE_SEP  # five seconds before
-    assert layout_for(152.9, sep) is Layout.STAGE_SEP
-    assert layout_for(153.0, sep) is Layout.FLIGHT  # ten seconds after
+    assert layout_for(157.9, sep) is Layout.STAGE_SEP
+    assert layout_for(158.0, sep) is Layout.FLIGHT  # fifteen seconds after
     assert layout_for(400, sep) is Layout.FLIGHT
 
 
@@ -43,21 +43,22 @@ def test_staged_only_once_the_separation_was_seen():
 def test_a_separation_earlier_than_planned_switches_the_bar_at_once():
     assert layout_for(70, 143.0) is Layout.STAGE_1
     assert layout_for(70, 143.0, 70.0) is Layout.STAGE_SEP
-    assert layout_for(79.9, 143.0, 70.0) is Layout.STAGE_SEP
-    assert layout_for(80.0, 143.0, 70.0) is Layout.FLIGHT  # ten seconds after the real separation, not the planned one
+    assert layout_for(84.9, 143.0, 70.0) is Layout.STAGE_SEP
+    assert layout_for(85.0, 143.0, 70.0) is Layout.FLIGHT  # fifteen seconds after the real separation, not the planned one
 
 
 def test_a_separation_later_than_planned_keeps_the_stage_sep_arrangement_until_it_happens():
     assert layout_for(138, 143.0) is Layout.STAGE_SEP
     assert layout_for(160, 143.0) is Layout.FLIGHT  # without it, the planned time decides
-    assert layout_for(160, 143.0, 158.0) is Layout.STAGE_SEP  # but once seen, ten seconds count from the real one
-    assert layout_for(168.0, 143.0, 158.0) is Layout.FLIGHT
+    assert layout_for(160, 143.0, 158.0) is Layout.STAGE_SEP  # but once seen, fifteen seconds count from the real one
+    assert layout_for(173.0, 143.0, 158.0) is Layout.FLIGHT
 
 
 def test_a_separation_without_any_marker_still_changes_the_bar():
     assert layout_for(100, None) is Layout.STAGE_1
     assert layout_for(100, None, 100.0) is Layout.STAGE_SEP
-    assert layout_for(110, None, 100.0) is Layout.FLIGHT
+    assert layout_for(114.9, None, 100.0) is Layout.STAGE_SEP
+    assert layout_for(115.0, None, 100.0) is Layout.FLIGHT
 
 
 def test_mock_hands_over_to_the_upper_stage():

@@ -16,6 +16,10 @@ from .attitude import VIEW_AZIMUTH_DEG, VIEW_ELEVATION_DEG, nose_direction
 from .mesh import Mesh
 
 SUPERSAMPLE = 2
+FLICKER_PATCHES = 48  # the heat shield flickers in this many patches, each on its own
+FLICKER_DEPTH = 0.30  # how far a patch's glow strays from the steady value at full glow
+AURA_SPREAD = 22  # the glow's halo reaches about a twenty-second of the picture's width: the glowing pixels, blurred by shrinking and growing the picture
+AURA_STRENGTH = 0.85
 STACK_SPLIT_Y = 0.05  # model height (the model is centred, one unit long) above which the stack is the ship and below it the booster
 BOOSTER_BACK = 0.9  # how far (in model lengths) the booster drops away during the separation animation
 SHIP_SHARE_OF_DIAL = 0.6  # the lone ship ends up this long compared with the whole stack before separation
@@ -26,6 +30,11 @@ AMBIENT = 0.38
 SOLID_LIFT = 0.40  # closed bodies are lit more evenly than flat faces, so a white booster stays white on its shaded side
 EDGE_DARKENING = 0.65  # how dark the faces of a closed body get at its silhouette, against 1.0 facing the viewer
 LIGHT_VIEW = np.array([-0.45, 0.65, -0.62])  # from the upper left, toward the viewer (view z grows away from it)
+HIGHLIGHT_SHARPNESS = 28.0  # how tight the glint on a shiny face is
+HIGHLIGHT_STRENGTH = 0.55  # and how bright, at full gloss
+REFLECTION = 0.45  # how much of a shiny face is the sky and ground reflected in it, at full gloss
+SKY = np.array([0.92, 0.96, 1.0])  # what a shiny face reflects looking up, and looking down
+GROUND = np.array([0.40, 0.38, 0.42])
 
 
 def view_matrix() -> np.ndarray:
@@ -55,6 +64,19 @@ def body_to_world(pitch_deg: float, heading_deg: float, roll_deg: float) -> np.n
     return np.column_stack([right, nose, top])
 
 
+GLOW_RED = np.array([0.62, 0.05, 0.01])  # the shield's glow as it comes up: dull red,
+GLOW_ORANGE = np.array([1.00, 0.36, 0.03])  # then orange,
+GLOW_WHITE = np.array([1.00, 0.86, 0.55])  # then white-hot
+
+
+def glow_colour(glow: float) -> np.ndarray:
+    """The colour of the heat shield's own light at this glow strength (0..1)."""
+    g = min(max(glow, 0.0), 1.0)
+    if g < 0.55:
+        return GLOW_RED + (GLOW_ORANGE - GLOW_RED) * (g / 0.55)
+    return GLOW_ORANGE + (GLOW_WHITE - GLOW_ORANGE) * ((g - 0.55) / 0.45)
+
+
 class ModelRenderer:
     def __init__(self, mesh: Mesh, size_px: int):
         """`size_px` is the width and height of the finished picture; the model is one unit long inside it."""
@@ -64,11 +86,59 @@ class ModelRenderer:
         self._is_booster = self._vertices[self._faces][:, :, 1].mean(axis=1) < split
         self._ship_centre = (0.5 + split) / 2  # height of the ship's middle
         self._ship_zoom = SHIP_SHARE_OF_DIAL / (0.5 - split)  # scale that settles the ship at its size in the dial
+        self._booster_centre = (-0.5 + split) / 2  # and the same for the booster, when it is the vessel being flown
+        self._booster_zoom = SHIP_SHARE_OF_DIAL / (split + 0.5)
         self._solid, self._outward = self._facing_signs(mesh)
+        self._smooth = self._smooth_normals(mesh)  # (M, 3) outward model-space normals of round faces (zero where the face is flat)
+        self._gloss = mesh.face_gloss.astype(np.float64) if mesh.face_gloss is not None else np.zeros(len(mesh.faces))
+        self._lift = mesh.face_lift.astype(np.float64) if mesh.face_lift is not None else np.zeros(len(mesh.faces))
+        self._heat = mesh.face_heat.astype(np.float64) if mesh.face_heat is not None else np.zeros(len(mesh.faces))
+        centre = self._vertices[self._faces].mean(axis=1)  # which patch of the shield a face is in, for the flicker: bands down the ship, then round it
+        turn = ((np.arctan2(centre[:, 2], centre[:, 0]) + np.pi) / (2 * np.pi) * 8).astype(int) % 8
+        self._patch = (np.floor((centre[:, 1] + 0.5) * 60).astype(int) * 8 + turn) % FLICKER_PATCHES
         self._colours = mesh.face_colors if mesh.face_colors is not None else np.tile(BASE_COLOUR, (len(mesh.faces), 1))
         self.size_px = size_px
         self._cache: dict[tuple[int, int, int, int], QImage] = {}
         self._view = view_matrix()
+        self._rest_vertices = self._vertices  # the model as built; the flaps are swung from here
+        self._flap_rigs = mesh.flaps
+        self._folds: tuple[float, ...] | None = None
+
+    @property
+    def has_flaps(self) -> bool:
+        return bool(self._flap_rigs)
+
+    def set_flap_folds(self, folds: tuple[float, ...] | None) -> bool:
+        """Swing the model's flaps: `folds` is how far in each is folded from fully deployed (swung round the hull away from the heat shield), in degrees, in the order forward-left,
+        forward-right, aft-left, aft-right; None puts them back as built. Returns whether anything changed (so a new picture is needed)."""
+        if not self._flap_rigs or folds == self._folds:
+            return False
+        self._folds = folds
+        vertices = self._rest_vertices.copy() if folds is not None else self._rest_vertices
+        if folds is not None:
+            for rig in self._flap_rigs:
+                angle = rig.mirror * math.radians(folds[(0 if rig.forward else 2) + (0 if rig.mirror == 1 else 1)])
+                cos, sin = math.cos(angle), math.sin(angle)
+                span = slice(rig.first, rig.first + rig.count)
+                dx, dz = vertices[span, 0] - rig.pivot[0], vertices[span, 2] - rig.pivot[1]
+                vertices[span, 0] = rig.pivot[0] + dx * cos - dz * sin
+                vertices[span, 2] = rig.pivot[1] + dx * sin + dz * cos
+        self._vertices = vertices
+        self._cache.clear()
+        return True
+
+    @staticmethod
+    def _smooth_normals(mesh: Mesh) -> np.ndarray:
+        """A face's normal from the smooth normals of its three corners, where the mesh has them: round bodies then shade without facets."""
+        count = len(mesh.faces)
+        if mesh.vertex_normals is None:
+            return np.zeros((count, 3))
+        normals = mesh.vertex_normals.astype(np.float64)[mesh.faces].mean(axis=1)
+        if mesh.solid is not None:
+            normals[~mesh.solid] = 0.0  # a flat face keeps its own normal
+        length = np.linalg.norm(normals, axis=1)
+        length[length == 0] = 1.0
+        return normals / length[:, None]
 
     def _facing_signs(self, mesh: Mesh) -> tuple[np.ndarray, np.ndarray]:
         """For the faces of a closed body round the Y axis: +1 or -1 so that the face's winding normal times it points outward.
@@ -100,9 +170,16 @@ class ModelRenderer:
         self._cache[key] = image
         return image
 
-    def _stage_triangles(self, step: int) -> tuple[np.ndarray, np.ndarray]:
-        """Triangle corners (model space) and which of them to draw, for a step of the separation animation."""
+    def _stage_triangles(self, step: int, booster_only: bool = False) -> tuple[np.ndarray, np.ndarray]:
+        """Triangle corners (model space) and which of them to draw, for a step of the separation animation.
+
+        With `booster_only` it is the booster alone, settled in the dial like the ship is after the separation."""
         corners = self._vertices[self._faces]  # (M, 3, 3)
+        if booster_only:
+            corners = corners.copy()
+            corners[:, :, 1] -= self._booster_centre
+            corners *= self._booster_zoom
+            return corners, np.flatnonzero(self._is_booster)
         if step == 0:
             return corners, np.arange(len(self._faces))
         p = step / PROGRESS_STEPS
@@ -115,18 +192,20 @@ class ModelRenderer:
         keep = np.arange(len(self._faces)) if step < PROGRESS_STEPS else np.flatnonzero(~self._is_booster)
         return corners, keep
 
-    def render_matrix(self, axes: np.ndarray, separation: float = 0.0) -> QImage:
+    def render_matrix(
+        self, axes: np.ndarray, separation: float = 0.0, booster_only: bool = False, glow: float = 0.0, flicker: int = 0
+    ) -> QImage:
         """The model for an exact orientation (columns: right, nose, top in east/north/up), without rounding to a degree.
 
         For a smoothly turning dial; nothing is cached, so call it only when the orientation has really changed.
         """
-        return self._draw_matrix(axes, round(min(max(separation, 0.0), 1.0) * PROGRESS_STEPS))
+        return self._draw_matrix(axes, round(min(max(separation, 0.0), 1.0) * PROGRESS_STEPS), booster_only, glow, flicker)
 
     def _draw(self, pitch: float, heading: float, roll: float, step: int = 0) -> QImage:
         return self._draw_matrix(body_to_world(pitch, heading, roll), step)
 
-    def _draw_matrix(self, axes: np.ndarray, step: int) -> QImage:
-        corners, keep = self._stage_triangles(step)
+    def _draw_matrix(self, axes: np.ndarray, step: int, booster_only: bool = False, glow: float = 0.0, flicker: int = 0) -> QImage:
+        corners, keep = self._stage_triangles(step, booster_only)
         world = corners[keep].reshape(-1, 3) @ axes.T
         view = world @ self._view.T  # x right, y up, z away from the viewer
         tri = view.reshape(-1, 3, 3)
@@ -142,9 +221,14 @@ class ModelRenderer:
         away = solid & (normal[:, 2] > 0)  # the far side of a closed body: hidden behind the near side
         normal[~solid & (normal[:, 2] > 0)] *= -1  # two-sided: always shade the side facing the viewer
         light = LIGHT_VIEW / np.linalg.norm(LIGHT_VIEW)
+        smooth = self._smooth[keep]
+        rounded = np.abs(smooth).sum(axis=1) > 0
+        if rounded.any():  # round faces: the smooth normal in view space instead of the facet's own
+            in_view = (smooth[rounded] @ axes.T) @ self._view.T
+            normal[rounded] = in_view / np.maximum(np.linalg.norm(in_view, axis=1), 1e-9)[:, None]
         shade = AMBIENT + (1 - AMBIENT) * np.clip(normal @ light, 0.0, 1.0)
         shade = np.where(solid, (SOLID_LIFT + (1 - SOLID_LIFT) * shade) * (EDGE_DARKENING + (1 - EDGE_DARKENING) * np.abs(normal[:, 2])), shade)  # round bodies fall away toward their edges
-        depth = -tri[:, :, 2].mean(axis=1)
+        depth = -tri[:, :, 2].mean(axis=1) + self._lift[keep]  # a part lying on a surface is drawn after the surface's own faces
         depth[away] = np.inf  # sorted to the end, then dropped
         order = np.argsort(depth)[: len(depth) - int(away.sum())]  # farthest first
 
@@ -158,7 +242,32 @@ class ModelRenderer:
         pixels = np.empty_like(tri[:, :, :2])
         pixels[:, :, 0] = centre + tri[:, :, 0] * scale
         pixels[:, :, 1] = centre - tri[:, :, 1] * scale
-        colours = np.clip(self._colours[keep] * shade[:, None], 0.0, 1.0)
+        base_colour = self._colours[keep]
+        lit = base_colour * shade[:, None]
+        gloss = self._gloss[keep]
+        if gloss.any():  # shiny faces mirror the sky above and the ground below, tinted by their metal
+            ahead = np.array([0.0, 0.0, 1.0])  # the way the viewer looks, in view space
+            bounce = ahead[None, :] - 2.0 * (normal @ ahead)[:, None] * normal
+            up = self._view @ np.array([0.0, 0.0, 1.0])  # which way is up, in view space
+            sky = np.clip(0.5 + 0.9 * (bounce @ up), 0.0, 1.0)
+            sky = sky * sky * (3.0 - 2.0 * sky)
+            mirror = GROUND[None, :] * (1.0 - sky[:, None]) + SKY[None, :] * sky[:, None]
+            weight = (gloss * REFLECTION)[:, None]
+            lit = lit * (1.0 - weight) + base_colour * mirror * weight * 1.5
+        if gloss.any():  # a glint where a shiny face catches the light, brightest where its normal bisects light and viewer
+            half = light + np.array([0.0, 0.0, -1.0])
+            half /= np.linalg.norm(half)
+            glint = np.clip(normal @ half, 0.0, 1.0) ** HIGHLIGHT_SHARPNESS * gloss * HIGHLIGHT_STRENGTH
+            lit = lit + glint[:, None]
+        if glow > 0.0:  # the re-entry glow: the heat shield's tiles give light of their own, less toward the edge of the ship
+            strength = self._heat[keep] * glow * 1.3 * (0.7 + 0.3 * np.abs(normal[:, 2]))
+            if flicker:  # small light flickers: each patch of the shield brightens and dims on its own, tick after tick
+                now = np.random.default_rng(flicker).uniform(-1.0, 1.0, FLICKER_PATCHES)
+                before = np.random.default_rng(flicker - 1).uniform(-1.0, 1.0, FLICKER_PATCHES)
+                strength = strength * (1.0 + FLICKER_DEPTH * glow * (0.65 * now + 0.35 * before)[self._patch[keep]])
+            weight = np.clip(strength, 0.0, 1.0)[:, None]
+            lit = lit * (1.0 - weight) + glow_colour(glow)[None, :] * weight * (0.8 + 0.2 * shade[:, None])
+        colours = np.clip(lit, 0.0, 1.0)
         previous = None
         for index in order:
             r, g, b = colours[index]
@@ -179,4 +288,25 @@ class ModelRenderer:
             mask.setPen(Qt.NoPen)
             mask.drawEllipse(QPointF(side / 2, side / 2), side / 2, side / 2)
             mask.end()
+        if glow > 0.05:
+            image = self._add_aura(image, glow)
         return image
+
+    @staticmethod
+    def _add_aura(image: QImage, glow: float) -> QImage:
+        """A soft halo of the glow's colour round the glowing parts, so the shield gives off light and not only looks lit."""
+        width, height = image.width(), image.height()
+        image = image.convertToFormat(QImage.Format_ARGB32_Premultiplied)
+        pixels = np.frombuffer(image.constBits(), dtype=np.uint8).reshape(height, width, 4).astype(np.float64) / 255.0  # B, G, R, A
+        hot = np.clip((pixels[:, :, 2] - pixels[:, :, 0] - 0.12) * 2.5, 0.0, 1.0)  # the red, orange and white-hot pixels: redder than blue, which steel never is
+        grey = QImage((hot * 255).astype(np.uint8).copy().data, width, height, width, QImage.Format_Grayscale8).copy()
+        shrink = max(width // AURA_SPREAD, 2)
+        small = grey.scaled(max(width // shrink, 1), max(height // shrink, 1), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+        blurred = small.scaled(width, height, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+        halo = np.frombuffer(blurred.constBits(), dtype=np.uint8).reshape(height, blurred.bytesPerLine())[:, :width].astype(np.float64) / 255.0
+        halo = halo * (1.0 - 0.7 * hot) * AURA_STRENGTH * min(glow * 1.4, 1.0)  # mostly outside the ship: on it the tiles' own light is already there
+        colour = glow_colour(glow)[::-1]  # B, G, R
+        pixels[:, :, :3] = np.clip(pixels[:, :, :3] + halo[:, :, None] * colour[None, None, :], 0.0, 1.0)
+        pixels[:, :, 3] = np.clip(pixels[:, :, 3] + halo, 0.0, 1.0)
+        data = (pixels * 255.0 + 0.5).astype(np.uint8).copy()
+        return QImage(data.data, width, height, width * 4, QImage.Format_ARGB32_Premultiplied).copy()

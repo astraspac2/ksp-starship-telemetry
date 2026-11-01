@@ -4,6 +4,8 @@
 
 A Starship-webcast-style telemetry overlay for Kerbal Space Program, made for the **Starship Expansion Project** Starship on its Super Heavy booster. It only reads from the game through [kRPC](https://krpc.github.io/krpc/): nothing here sends a flight command.
 
+**It does not work with other rockets.** It is built for that one Starship and Super Heavy (the engine dial, separation detection, flaps and 3D model all assume them), so it will not give sensible readings on any other craft.
+
 **To start it, run this one file:**
 
 ```bash
@@ -23,12 +25,40 @@ python run_ground_station.py
 
 - **Launch bar:** countdown clock, curved timeline, engine dots with a propellant ring, a 3D dial with the Starship on its booster, speed and altitude. It switches layout through stage 1, stage separation and flight, and the real separation is detected from the data.
 - **Timeline:** milestones scroll past the clock and the line bows with altitude. Add your own events and notes.
-- **Automatic markers:** plan a maneuver node in KSP and you are asked to name it; a RE-ENTRY marker appears at 70 km once the vessel has been above 70 km (suborbital flights count).
+- **Moving flaps:** the four flaps of the ship in the 3D dial follow the real ones: deploy and retract, each flap's own deploy angle (it changes on the landing burn) and pitch, roll and yaw input.
+- **Re-entry glow:** the ship's heat shield glows red, orange and white-hot in the 3D dial while it comes down, with a halo and small flickers. **The re-entry glow is still a work in progress**: when it starts and ends, and how it looks, will still change.
+- **Automatic markers:** plan a maneuver node in KSP and you are asked to name it. A RE-ENTRY marker is set when the ship comes down through 70 km (it arms once the ship has been above 30 km), and a LANDING BURN marker predicts the burn and is set at 800 m (it arms once the ship has been above 50 km). Both show from T+00:10:00.
+- **One overlay window:** the pill and the bar are parts of a single window, so capture software sees only one.
 - **Static-fire bar:** a small bar for the pad with engines, clock, thrust and throttle, in the bottom-right corner.
 - **Map:** a black-and-white Earth with your position instead of the engine dial.
 - **Honest data:** mock data is always labelled MOCK, and a lost or stale feed says so.
 
 ![Static-fire bar](docs/static-fire-bar.png)
+
+## Screenshots
+
+![The static-fire bar on the pad, T-30 seconds before the static fire](docs/static-fire-pad.png)
+
+<details>
+<summary>The flight bar from liftoff to space (4 pictures)</summary>
+
+**Liftoff**, T+00:00:02: engine dial, 3D dial, speed and altitude.
+
+![Flight bar at liftoff](docs/flight-liftoff.png)
+
+**Max Q**, T+00:01:32: the Starship on its Super Heavy in the 3D dial, the curved timeline bowing with altitude.
+
+![Flight bar near max Q](docs/flight-max-q.png)
+
+**Stage separation**, T+00:01:55: the SUPER HEAVY / STARSHIP layout, each with its own speed and engine dial.
+
+![SUPER HEAVY and STARSHIP layout after stage separation](docs/flight-stage-sep.png)
+
+**In space**, T+00:04:10: the ship alone in the 3D dial after the booster is gone.
+
+![Flight bar in space with the ship alone](docs/flight-in-space.png)
+
+</details>
 
 ## Quick start
 
@@ -58,13 +88,15 @@ Recommended: KerbalJointReinforcementContinued, FlyByWireSASMode and MechJeb2. (
 
 </details>
 
-**Stuck on "CONNECTING ... ValueError: Invalid type"?** The kRPC mod in your KSP is not version 0.6.0, most often the newest release (0.7.0), which does not work with this app. Download the **older** kRPC 0.6.0 from the link above and replace the newer one; the Python package is already pinned to 0.6.0 by `pip install -r requirements.txt`.
+**Status says "kRPC version mismatch" (or "ValueError: Invalid type")?** The kRPC mod in your KSP is not version 0.6.0, most often the newest release (0.7.0), which does not work with this app. Download the **older** kRPC 0.6.0 from the link above and replace the newer one; the Python package is already pinned to 0.6.0 by `pip install -r requirements.txt`.
 
-The map assumes Earth: it plots your latitude and longitude on a map of Earth, so it needs a real-scale Earth planet pack (the author uses one). On stock Kerbin, leave the map off.
+The map assumes Earth: it plots your latitude and longitude on a map of Earth, so it needs an Earth-like planet pack. **If you want to use the map, I recommend Sol Quarter Scale** (a quarter-scale real solar system). On stock Kerbin, leave the map off.
 
 ## Using it
 
-The pill and bar are click-through, always-on-top windows for capture software or a screen; the control panel is a normal window. Settings are saved in `%APPDATA%\KSP Starship Telemetry\settings.json`.
+The pill and bar share one overlay window, `KSP Starship Telemetry - Overlay`: it is as big as your screen, transparent where nothing is drawn, click-through and always on top by default. The control panel is a normal window. Settings are saved in `%APPDATA%\KSP Starship Telemetry\settings.json`; next to it the app writes `flap-trace.csv` and `booster-loss.csv`, records of what the game reported about the flaps and the lost booster.
+
+**In OBS:** add one Window Capture source, pick `KSP Starship Telemetry - Overlay`, set the Capture Method to "Windows 10 (1903 and up)" (the other methods show the transparent parts as black) and stretch it over the whole scene. For chroma key, pick the solid colour background: the whole overlay window gets that colour.
 
 | Where | What |
 |---|---|
@@ -72,6 +104,9 @@ The pill and bar are click-through, always-on-top windows for capture software o
 | Key `M` | Map instead of the engine dial (flight bar) |
 | Mission & Timeline tab | Countdown, your events, the automatic markers (hide, rename or delete) |
 | Markers tab | Stamp a typed note at the current time |
+| HUD tab, Screen resolution | Scale the whole HUD to your monitor (automatic by default) |
+| HUD tab, side panels | Show or hide the bar's side panels; they sink away and rise again like the first rise |
+| HUD tab, flaps and re-entry glow | Turn the flaps' roll and yaw movement, and the re-entry glow, on or off |
 | HUD tab, 3D model | Use your own `.glb`, `.gltf`, `.obj` or `.stl` instead of the built-in Starship, and untick click-through to drag the windows |
 | Broadcast lock | Locks every setting during a stream |
 
@@ -79,15 +114,15 @@ On the pad, KSP keeps mission time at 0, so the static-fire bar's clock runs on 
 
 ## Timeline accuracy
 
-The timeline is not always exact to the game: its events are the times you plan, and only stage separation, maneuver nodes and re-entry are picked up from the game itself.
+The timeline is not always exact to the game: its events are the times you plan, and only stage separation, maneuver nodes, re-entry and the landing burn are picked up from the game itself.
 It is most accurate when a flight repeats: if a script flies it (for example a kOS script) and the events happen at almost the same time every launch, set your events to those times and the timeline will line up closely.
 Editing your kOS script so its events land at fixed times makes it even more accurate. Change the times in the **Mission & Timeline** tab.
 
 ## Status
 
-The launch bar, static-fire bar, engine dial (all four cluster modes), stage-separation detection, 3D dial, map, timeline, maneuver-node prompt and RE-ENTRY marker have all been used in real launches and a static fire.
+The launch bar, static-fire bar, engine dial (all four cluster modes), stage-separation detection, 3D dial, map, timeline, maneuver-node prompt, RE-ENTRY and LANDING BURN markers, moving flaps and re-entry glow have all been used in real launches and a static fire.
 
-**Not made yet:** the booster's boostback burn and landing. After stage separation the overlay follows the ship only.
+**Not made yet:** the booster's boostback burn and landing. After stage separation the overlay follows the ship, and shows the booster's speed and altitude for as long as the game still reports it (then NO DATA).
 
 Other scripts: `run_bar_demo.py` and `run_pill_demo.py` (the bar or pill alone with mock data), `run_live.py` (a bare runner without the panel), `render_previews.py` and `render_sequences.py` (pictures of every view), and `python -m pytest` for the tests.
 

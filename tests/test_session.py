@@ -1,5 +1,6 @@
 import pytest
 
+from ground_station.auto_markers import LANDING, NODE, REENTRY, AutoMarker
 from ground_station.clock import ClockState
 from ground_station.krpc_source import ConnState, LiveSample, ReaderStatus
 from ground_station.session import Session
@@ -346,3 +347,81 @@ def test_switching_source_forgets_a_question_that_was_waiting():
     assert session.pending_node is not None
     session.set_source(DataSource.MOCK)
     assert session.pending_node is None
+
+
+class _TraceStub:
+    def __init__(self):
+        self.rows = []
+
+    def add(self, *row):
+        self.rows.append(row)
+
+
+def test_a_live_session_feeds_the_staging_trace_and_a_demo_source_does_not():
+    session = make_session()
+    session.trace = _TraceStub()
+    session.connect()
+    FakeReader.instances[0].status = ReaderStatus(
+        ConnState.CONNECTED, LiveSample(100.0, 7000.0, 50_000.0, 0.5, 0.0, 6, 6, "flying", 0.0, ut=1000.0), 0.0, None
+    )
+    session.telemetry()
+    assert len(session.trace.rows) == 1 and session.trace.rows[0][1:3] == (6, 6)
+    demo = make_session(source="MOCK")
+    demo.trace = _TraceStub()
+    demo.telemetry()
+    assert demo.trace.rows == []
+
+
+def _flying(ut, met, state=ConnState.CONNECTED, stale=False):
+    sample = LiveSample(met, 700.0, 50_000.0, 0.5, 0.0, 6, 6, "flying", 0.0, ut=ut)
+    return ReaderStatus(state, sample, 0.0 if state is ConnState.CONNECTED and not stale else 9.0, None)
+
+
+def test_jumping_to_mission_time_sets_the_clock_to_what_ksp_reports():
+    session = make_session()
+    session.connect()
+    reader = FakeReader.instances[0]
+    assert not session.can_jump_to_mission_time() and session.jump_to_mission_time() is None  # no data yet
+    reader.status = _flying(5000.0, 455.0)
+    assert session.can_jump_to_mission_time()
+    session.start_countdown()
+    session.abort_countdown()
+    assert session.jump_to_mission_time() == 455.0
+    assert session.t == 455.0 and session.clock.last_t == 455.0 and session.clock.state is ClockState.RUNNING
+
+
+def test_there_is_nothing_to_jump_to_before_ksp_starts_its_mission_clock_or_without_live_data():
+    session = make_session()
+    session.connect()
+    reader = FakeReader.instances[0]
+    reader.status = _flying(5000.0, 0.0)  # mission time not started
+    assert not session.can_jump_to_mission_time() and session.jump_to_mission_time() is None
+    reader.status = ReaderStatus(ConnState.CONNECTED, _flying(5000.0, 455.0).sample, 9.0, None)  # a stale reading
+    stale = session.reader_status()
+    assert stale.stale and not session.can_jump_to_mission_time()
+    demo = make_session(source="MOCK")
+    assert not demo.can_jump_to_mission_time()
+
+
+def test_jumping_leaves_the_detected_separation_alone():
+    session = make_session()
+    session.connect()
+    session.separation.separated_at = 104.0
+    FakeReader.instances[0].status = _flying(5000.0, 455.0)
+    session.jump_to_mission_time()
+    assert session.separation.separated_at == 104.0
+
+
+def test_reentry_and_landing_markers_only_show_on_the_timeline_from_ten_minutes_in():
+    session, reader, wall = watching_session()
+    session.auto_markers.extend(
+        [AutoMarker("Re-entry", 900.0, REENTRY), AutoMarker("Landing burn", 1000.0, LANDING), AutoMarker("Burn", 700.0, NODE)]
+    )
+
+    def shown():
+        return [m.name for m in session.milestones() if m.name in ("RE-ENTRY", "LANDING BURN", "BURN")]
+
+    session.t = 599.0
+    assert shown() == ["BURN"]
+    session.t = 600.0
+    assert shown() == ["BURN", "RE-ENTRY", "LANDING BURN"]

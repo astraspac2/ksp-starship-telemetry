@@ -12,20 +12,28 @@ class HudWindow(QWidget):
         self._on_top = True
         self._click_through = True
         self._drag_offset = None
+        self._embedded = False
         self.setAttribute(Qt.WA_TranslucentBackground)
         self._apply_flags()
+
+    def embed(self, parent: QWidget) -> None:
+        """Become a part of `parent`'s window instead of a window of its own (the window options then belong to the parent)."""
+        self._embedded = True
+        self.setParent(parent)
 
     def set_window_options(self, on_top: bool, click_through: bool) -> None:
         if (on_top, click_through) == (self._on_top, self._click_through):
             return
         self._on_top, self._click_through = on_top, click_through
+        if self._embedded:
+            return
         was_visible = self.isVisible()
         self._apply_flags()
         if was_visible:
             self.show()  # changing window flags hides the window, so bring it back
 
     def _apply_flags(self) -> None:
-        flags = Qt.FramelessWindowHint | Qt.Tool
+        flags = Qt.FramelessWindowHint | Qt.Window  # an ordinary window (not a tool window), so OBS lists it for Window Capture
         if self._on_top:
             flags |= Qt.WindowStaysOnTopHint
         if self._click_through:
@@ -34,11 +42,17 @@ class HudWindow(QWidget):
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
-            self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            if self._embedded:
+                self._drag_offset = event.position().toPoint()
+            else:
+                self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
 
     def mouseMoveEvent(self, event) -> None:
         if self._drag_offset is not None and event.buttons() & Qt.LeftButton:
-            self.move(event.globalPosition().toPoint() - self._drag_offset)
+            if self._embedded:
+                self.move(self.parentWidget().mapFromGlobal(event.globalPosition().toPoint()) - self._drag_offset)
+            else:
+                self.move(event.globalPosition().toPoint() - self._drag_offset)
 
     def mouseReleaseEvent(self, _event) -> None:
         self._drag_offset = None

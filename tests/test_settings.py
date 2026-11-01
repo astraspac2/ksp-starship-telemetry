@@ -71,6 +71,7 @@ def test_hud_options_out_of_range_fall_back_to_defaults(tmp_path):
                 "background_color": "#12",
                 "panel_opacity": 4,
                 "hud_scale": 9,
+                "ship_scale": 9,
                 "timeline_nodes": 0,
                 "click_through": "yes",
                 "font": 12,
@@ -150,3 +151,10 @@ def test_the_pad_has_its_own_event_list_with_a_short_burn_and_bad_rows_are_dropp
     assert [e["label"] for e in loaded.pad_events] == ["Full thrust"]
     path.write_text('{"pad_events": "nonsense"}', encoding="utf8")
     assert [e["label"] for e in settings.load(path).pad_events] == ["Ignition", "Shutdown"]
+
+
+def test_panel_picture_settings_are_checked_when_loaded(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text('{"panel_theme": "mars", "panel_image": 5, "panel_image_dim": 500}')
+    loaded = settings.load(path)
+    assert loaded.panel_theme == "mars" and loaded.panel_image == "" and loaded.panel_image_dim == 55

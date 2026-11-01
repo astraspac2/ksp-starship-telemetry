@@ -2,8 +2,10 @@
 
 Three arrangements, as on the Starship overlay, and a fourth for the pad:
   stage 1     booster engines and attitude dial on the left, speed and altitude on the right (until shortly before Stage Sep)
-  stage sep   booster engines + dial on the left, speed + the upper stage's engines on the right (from 5 s before to 10 s after)
+  stage sep   booster engines + dial on the left, speed + the upper stage's engines on the right (from 5 s before to 15 s after)
   flight      speed and altitude on the left, dial and the upper stage's engines on the right (after that)
+  split       once the stage separation is over and the booster is still being read: its speed and altitude on the left
+              (SUPER HEAVY), the ship's speed and engines on the right (STARSHIP). When the booster is gone, flight again
   pad         engines and dial on the left, thrust and throttle on the right (the operator's pad / static-fire mode; it
               never follows the Stage Sep marker)
 
@@ -15,7 +17,7 @@ from enum import Enum
 from .timeline import Milestone
 
 STAGE_SEP_LEAD = 5.0  # the stage-sep arrangement appears this long before the marker
-STAGE_SEP_TAIL = 10.0  # and gives way to the flight arrangement this long after it
+STAGE_SEP_TAIL = 15.0  # and gives way to the flight arrangement this long after it
 _STAGE_SEP_NAMES = {"stage sep", "stage separation"}
 
 
@@ -23,6 +25,7 @@ class Layout(Enum):
     STAGE_1 = "stage 1"
     STAGE_SEP = "stage sep"
     FLIGHT = "flight"
+    SPLIT = "split"
     PAD = "pad"
 
 
@@ -36,21 +39,23 @@ def stage_sep_time(milestones: list[Milestone]) -> float | None:
     return next((m.time for m in milestones if is_stage_sep(m.name)), None)
 
 
-def layout_for(t: float, planned: float | None, observed: float | None = None) -> Layout:
+def layout_for(t: float, planned: float | None, observed: float | None = None, booster_live: bool = False) -> Layout:
     """The arrangement at flight time t.
 
     `planned` is the Stage Sep marker; it brings the stage-sep arrangement in ahead of time. `observed` is when the
     separation was actually seen in the data; once it is known it decides when the flight arrangement takes over,
-    and it brings the stage-sep arrangement in at once if the stack separated earlier than planned.
+    and it brings the stage-sep arrangement in at once if the stack separated earlier than planned. While the booster
+    is still being read (`booster_live`) the split arrangement takes the flight arrangement's place.
     """
+    after = Layout.SPLIT if booster_live else Layout.FLIGHT
     if observed is not None:
         start = observed if planned is None else min(planned - STAGE_SEP_LEAD, observed)
         if t < start:
             return Layout.STAGE_1
-        return Layout.STAGE_SEP if t < observed + STAGE_SEP_TAIL else Layout.FLIGHT
+        return Layout.STAGE_SEP if t < observed + STAGE_SEP_TAIL else after
     if planned is None or t < planned - STAGE_SEP_LEAD:
         return Layout.STAGE_1
-    return Layout.STAGE_SEP if t < planned + STAGE_SEP_TAIL else Layout.FLIGHT
+    return Layout.STAGE_SEP if t < planned + STAGE_SEP_TAIL else after
 
 
 def staged(t: float, observed: float | None) -> bool:
@@ -58,7 +63,7 @@ def staged(t: float, observed: float | None) -> bool:
     return observed is not None and t >= observed
 
 
-ARRANGEMENT_FADE = 1.4  # seconds a change of arrangement takes: the old dial goes, then the new one draws itself in
+ARRANGEMENT_FADE = 1.1  # seconds a change of arrangement takes, timed on the overlay video as it plays (about 0.4 s of old dials going, then new ones coming)
 
 
 def fade_progress(now: float, started: float, duration: float = ARRANGEMENT_FADE) -> float:
@@ -72,18 +77,27 @@ class BoosterMemory:
     """The booster's last readings, so its engine dial can hold what it showed when the stack separated.
 
     After the separation the game reports the upper stage, so the booster's own state is only known from before.
+    A reading may come with its engine count (`size`): the first count seen is the stack's own, and readings with any
+    other count (the upper stage's, or a flicker while the game switches vessels) are never taken for the booster's.
     """
 
     def __init__(self, keep_seconds: float = 3.0):
         self._keep = keep_seconds
         self._items: list[tuple[float, object]] = []
+        self._size: int | None = None
 
     def clear(self) -> None:
         self._items.clear()
+        self._size = None
 
-    def record(self, t: float, reading: object) -> None:
+    def record(self, t: float, reading: object, size: int = 0) -> None:
         if self._items and t < self._items[-1][0] - 1.0:
-            self._items.clear()  # time ran backwards (a reset), so the old readings are from another flight
+            self.clear()  # time ran backwards (a reset), so the old readings are from another flight
+        if size > 0:
+            if self._size is None:
+                self._size = size
+            elif size != self._size:
+                return
         self._items.append((t, reading))
         while self._items and self._items[0][0] < t - self._keep:
             self._items.pop(0)

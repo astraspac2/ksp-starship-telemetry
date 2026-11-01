@@ -11,3 +11,6 @@ previews/
 # local settings and logs
 settings.json
 *.log
+
+# probe recordings
+*-probe.csv

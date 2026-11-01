@@ -109,3 +109,98 @@ def test_the_3d_dial_turns_smoothly_rather_than_in_steps(qapp):
     bar._attitude_time -= 5.0  # a long pause: the dial starts again from the real attitude
     bar._rocket_image(turned)
     assert np.allclose(bar._attitude, target)
+
+
+def test_switching_the_map_on_fades_even_when_the_panel_sets_the_view_mode_again(qapp):
+    """Every change in the panel re-applies all the display settings, including the unchanged view mode; that must not cut the fade."""
+    bar = TelemetryBar()
+    bar.set_smoothing(False)
+    bar.set_telemetry(mock_telemetry(60.0, 143.0))
+    before = bar.grab().toImage()
+    bar.set_show_map(True)
+    bar.set_view_mode("flight")  # what apply_display does after the checkbox is ticked
+    bar.grab()  # the change is seen: the old dial starts to go
+    bar._changed_at -= 0.3  # a moment into the fade
+    middle = bar.grab().toImage()
+    bar._changed_at -= 5.0
+    after = bar.grab().toImage()
+    assert middle != before and middle != after  # a frame between the two dials exists
+
+
+def test_changing_between_the_flight_bar_and_the_pad_bar_still_cuts_straight_over(qapp):
+    bar = TelemetryBar()
+    bar.set_telemetry(mock_telemetry(60.0, 143.0))
+    bar.grab()
+    bar.set_view_mode("pad")
+    assert bar._shown is None
+
+
+def test_the_engine_dial_and_the_map_swap_faster_than_a_change_of_arrangement(qapp):
+    from ground_station.bar import MAP_FADE_SECONDS
+    from ground_station.layout import ARRANGEMENT_FADE
+
+    assert MAP_FADE_SECONDS < ARRANGEMENT_FADE
+    bar = TelemetryBar()
+    bar.set_smoothing(False)
+    bar.set_telemetry(mock_telemetry(60.0, 143.0))
+    bar.set_show_map(False)
+    bar.grab()
+    bar._changed_at -= 5.0
+    bar.grab()
+    bar.set_show_map(True)
+    bar.grab()
+    assert bar._fade_seconds == MAP_FADE_SECONDS  # the same arrangement, a different dial
+    bar.set_telemetry(mock_telemetry(140.0, 143.0))  # now the stage-sep arrangement comes in
+    bar.grab()
+    assert bar._fade_seconds == ARRANGEMENT_FADE
+
+
+def test_the_fuel_ring_of_a_newly_arrived_engine_dial_starts_as_its_dots_are_all_but_there(qapp):
+    from ground_station.bar import FADE_OUT_SHARE, MAP_FADE_SECONDS, RING_EARLY_SECONDS, RING_FILL_SECONDS
+
+    bar = TelemetryBar()
+    bar.set_smoothing(False)
+    bar.set_telemetry(mock_telemetry(60.0, 143.0))
+    bar.set_show_map(True)
+    bar.grab()
+    bar._changed_at -= 5.0
+    bar.grab()
+    bar.set_show_map(False)  # the engine dial comes back
+    bar.grab()
+    arrival = bar._changed_at + FADE_OUT_SHARE * MAP_FADE_SECONDS  # the dots start to appear
+    full = bar._changed_at + MAP_FADE_SECONDS  # and are all there
+    assert RING_FILL_SECONDS == 0.4 and abs((full - RING_EARLY_SECONDS) - (arrival + 0.2)) < 1e-9  # 0.2 s after the dots start
+    assert bar._ring_fill(arrival + 0.19) == 0.0
+    assert bar._ring_fill(arrival + 0.2 + 0.07) > 0.0
+    assert 0.4 < bar._ring_fill(arrival + 0.2 + RING_FILL_SECONDS / 2) < 0.6
+    assert bar._ring_fill(arrival + 0.2 + RING_FILL_SECONDS) == pytest.approx(1.0)  # the clock value is large, so floats round
+
+
+def test_the_ring_waits_for_a_slower_arrangement_change_to_bring_its_dots_in(qapp):
+    from ground_station.bar import RING_EARLY_SECONDS
+    from ground_station.layout import ARRANGEMENT_FADE
+
+    bar = TelemetryBar()
+    bar.set_smoothing(False)
+    bar.set_telemetry(mock_telemetry(60.0, 143.0))
+    bar.grab()
+    bar._changed_at -= 5.0
+    bar.grab()
+    bar.set_telemetry(mock_telemetry(140.0, 143.0))  # the stage-sep arrangement comes in
+    bar.grab()
+    assert bar._fade_seconds == ARRANGEMENT_FADE
+    assert bar._ring_fill(bar._changed_at + ARRANGEMENT_FADE - RING_EARLY_SECONDS - 0.01) == 0.0  # still waiting for the dots
+
+
+def test_a_dial_that_did_not_change_keeps_its_full_ring(qapp):
+    bar = TelemetryBar()
+    bar.set_smoothing(False)
+    bar.set_telemetry(mock_telemetry(60.0, 143.0))
+    bar.set_show_map(False)
+    bar.grab()
+    bar.set_show_map(True)
+    bar.grab()
+    assert 953.0 not in bar._arrived and bar._arrived  # only the dial that swapped is in the slow fill
+    bar.set_view_mode("pad")
+    bar.grab()
+    assert bar._arrived == set()  # a fresh bar is simply there

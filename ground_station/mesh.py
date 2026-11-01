@@ -13,11 +13,22 @@ from pathlib import Path
 import numpy as np
 
 SUPPORTED = (".obj", ".stl", ".glb", ".gltf")
-DEFAULT_MAX_TRIANGLES = 2200
+DEFAULT_MAX_TRIANGLES = 3000
 
 
 class ModelError(Exception):
     """A model file could not be used; the message says why, for the operator."""
+
+
+@dataclass(frozen=True)
+class FlapRig:
+    """A flap that can swing: its vertices are `count` from `first`, and it turns about the vertical line through `pivot` (x, z)."""
+
+    first: int
+    count: int
+    pivot: tuple[float, float]
+    forward: bool  # a forward flap (just below the nose) rather than an aft one
+    mirror: int  # +1 or -1: which side of the ship; folding turns it by mirror times the fold angle, away from the heat shield
 
 
 @dataclass
@@ -27,6 +38,11 @@ class Mesh:
     face_colors: np.ndarray | None = None  # (M, 3) float32 in 0..1, or None for one plain colour
     stage_split: float | None = None  # model height where the ship meets the booster, or None for the default split
     solid: np.ndarray | None = None  # (M,) bool: faces of a closed body round the Y axis, whose far side need not be drawn
+    vertex_normals: np.ndarray | None = None  # (N, 3) float32 outward normals, so a round body shades smoothly instead of in facets
+    face_gloss: np.ndarray | None = None  # (M,) float32 0..1: how shiny each face is (a highlight where it catches the light)
+    face_lift: np.ndarray | None = None  # (M,) float32: how much nearer to draw a face than its depth says, for parts lying on a surface
+    face_heat: np.ndarray | None = None  # (M,) float32 0..1: how much of the re-entry glow a face takes (the heat shield's black tiles)
+    flaps: tuple[FlapRig, ...] = ()  # the parts that swing with the real vehicle's flaps, if the model has any
 
     @property
     def triangle_count(self) -> int:
@@ -201,6 +217,26 @@ def _parse_gltf(data: bytes, folder: Path, binary: bool) -> Mesh:
 
 
 # tidying
+_PREPARED: dict[tuple, Mesh] = {}
+
+
+def load_prepared(path: str | Path, flip: bool = False) -> Mesh:
+    """load_mesh + normalize, remembered per file (and its modified time) and flip, so a big model is thinned out only once:
+    the panel and the bar both ask for it, and the bar asks again every time any setting changes."""
+    path = Path(path)
+    try:
+        stamp = path.stat().st_mtime_ns
+    except OSError as exc:
+        raise ModelError(f"Could not read the file: {exc}") from exc
+    key = (str(path), stamp, bool(flip))
+    mesh = _PREPARED.get(key)
+    if mesh is None:
+        mesh = normalize(load_mesh(path), flip=flip)
+        _PREPARED.clear()  # only the model in use is worth keeping
+        _PREPARED[key] = mesh
+    return mesh
+
+
 def normalize(mesh: Mesh, flip: bool = False, max_triangles: int = DEFAULT_MAX_TRIANGLES) -> Mesh:
     """Centre the model, stand its long axis along +Y nose up, scale it to one unit long, and thin it out."""
     vertices = mesh.vertices.astype(np.float64)
@@ -214,9 +250,9 @@ def normalize(mesh: Mesh, flip: bool = False, max_triangles: int = DEFAULT_MAX_T
         raise ModelError("The model has no size.")
     vertices /= length
 
-    # The nose is the narrower end. Compare how far the vertices stray from the axis near each end.
+    # The nose is the narrower end. Compare how far the vertices stray from the axis right at each end.
     radial = np.hypot(vertices[:, 0], vertices[:, 2])
-    top, bottom = vertices[:, 1] > 0.38, vertices[:, 1] < -0.38
+    top, bottom = vertices[:, 1] > 0.45, vertices[:, 1] < -0.45  # the very tips: a pointed nose is far narrower there than an engine end
     top_width = radial[top].mean() if top.any() else 0.0
     bottom_width = radial[bottom].mean() if bottom.any() else 0.0
     if top_width > bottom_width:
@@ -229,26 +265,61 @@ def normalize(mesh: Mesh, flip: bool = False, max_triangles: int = DEFAULT_MAX_T
 
 
 def decimate(mesh: Mesh, max_triangles: int) -> Mesh:
-    """Thin a heavy model by merging vertices that fall in the same cell of a grid, until it is light enough."""
-    vertices = mesh.vertices
+    """Thin a heavy model by merging the vertices that fall in the same cell of a grid, until it is light enough.
+
+    Each merged vertex is not the average of its cell (which pulls a round body in and rounds off its edges) but the point that
+    stays closest to all the surfaces that met in the cell, found from their planes (vertex clustering with the quadric error)."""
+    vertices = mesh.vertices.astype(np.float64)
+    faces = mesh.faces.astype(np.int64)
+    count = len(vertices)
     low = vertices.min(axis=0)
     span = float(max(vertices.max(axis=0) - low))
+
+    # the plane of every face, as a 4x4 symmetric matrix (ten numbers) weighted by its area, handed to its three corners
+    corners = vertices[faces]
+    cross = np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0])
+    double_area = np.linalg.norm(cross, axis=1)
+    safe = np.where(double_area > 0, double_area, 1.0)
+    normal = cross / safe[:, None]
+    offset = -np.einsum("ij,ij->i", normal, corners[:, 0])
+    plane = np.column_stack([normal, offset])
+    pairs = [(0, 0), (0, 1), (0, 2), (0, 3), (1, 1), (1, 2), (1, 3), (2, 2), (2, 3), (3, 3)]
+    weight = double_area / 2.0
+    vertex_quadric = np.zeros((count, 10))
+    for slot, (r, c) in enumerate(pairs):
+        face_value = plane[:, r] * plane[:, c] * weight
+        for corner in range(3):
+            vertex_quadric[:, slot] += np.bincount(faces[:, corner], weights=face_value, minlength=count)
+
     best = mesh
     for cells in (128, 96, 72, 56, 44, 34, 26, 20, 16, 12):
-        keys = np.floor((vertices - low) / (span / cells)).astype(np.int64)
-        _, inverse, counts = np.unique(keys, axis=0, return_inverse=True, return_counts=True)
+        size = span / cells
+        grid = np.floor((vertices - low) / size).astype(np.int64)
+        key = (grid[:, 0] * (cells + 2) + grid[:, 1]) * (cells + 2) + grid[:, 2]
+        _, inverse, counts = np.unique(key, return_inverse=True, return_counts=True)
         inverse = inverse.reshape(-1)
-        merged = np.zeros((len(counts), 3), dtype=np.float64)
-        np.add.at(merged, inverse, vertices)
-        merged /= counts[:, None]
-        faces = inverse[mesh.faces]
-        alive = (faces[:, 0] != faces[:, 1]) & (faces[:, 1] != faces[:, 2]) & (faces[:, 0] != faces[:, 2])
+        cell_count = len(counts)
+        mean = np.column_stack([np.bincount(inverse, weights=vertices[:, axis], minlength=cell_count) for axis in range(3)]) / counts[:, None]
+        q = np.column_stack([np.bincount(inverse, weights=vertex_quadric[:, slot], minlength=cell_count) for slot in range(10)])
+        a = np.empty((cell_count, 3, 3))
+        a[:, 0, 0], a[:, 0, 1], a[:, 0, 2] = q[:, 0], q[:, 1], q[:, 2]
+        a[:, 1, 0], a[:, 1, 1], a[:, 1, 2] = q[:, 1], q[:, 4], q[:, 5]
+        a[:, 2, 0], a[:, 2, 1], a[:, 2, 2] = q[:, 2], q[:, 5], q[:, 7]
+        b = np.column_stack([q[:, 3], q[:, 6], q[:, 8]])
+        pull = 0.02 * (a[:, 0, 0] + a[:, 1, 1] + a[:, 2, 2]) / 3.0 + 1e-12  # a gentle pull toward the average, so a flat patch stays put
+        a += pull[:, None, None] * np.eye(3)
+        merged = np.linalg.solve(a, (-b + pull[:, None] * mean)[:, :, None])[:, :, 0]
+        merged = np.clip(merged, mean - size, mean + size)  # never further than a cell from where the vertices were
+        remapped = inverse[faces]
+        alive = (remapped[:, 0] != remapped[:, 1]) & (remapped[:, 1] != remapped[:, 2]) & (remapped[:, 0] != remapped[:, 2])
         keep = np.flatnonzero(alive)
-        _, first = np.unique(np.sort(faces[keep], axis=1), axis=0, return_index=True)  # drop faces that became copies
+        ordered = np.sort(remapped[keep], axis=1)
+        face_key = (ordered[:, 0] * cell_count + ordered[:, 1]) * cell_count + ordered[:, 2]
+        _, first = np.unique(face_key, return_index=True)  # drop faces that became copies of each other
         keep = keep[np.sort(first)]
         best = Mesh(
             merged.astype(np.float32),
-            faces[keep].astype(np.int32),
+            remapped[keep].astype(np.int32),
             None if mesh.face_colors is None else mesh.face_colors[keep],
         )
         if best.triangle_count <= max_triangles:

@@ -14,7 +14,7 @@ ARC_SPAN_DEG = 240.0  # clockwise over the top to the lower right, leaving a wid
 ARC_START = int(ARC_START_DEG * 16)  # Qt takes 1/16 degree
 ARC_SWEEP = -int(ARC_SPAN_DEG * 16)
 END_TICK_LENGTH = 8.0
-ROCKET_LENGTH = 1.72  # the dial's rocket standing upright, in dial radii
+ROCKET_LENGTH = 2.02  # the dial's rocket standing upright, in dial radii
 
 
 def _backing(painter: QPainter, center: QPointF, radius: float) -> None:
@@ -33,9 +33,11 @@ def _radial(center: QPointF, radius: float, degrees: float, inner: float, outer:
 
 
 def _arc(
-    painter: QPainter, center: QPointF, radius: float, fraction: float, theme: Theme, width: float, backing: bool = True
+    painter: QPainter, center: QPointF, radius: float, fraction: float, theme: Theme, width: float, backing: bool = True, reveal: float = 1.0
 ) -> None:
-    """An open ring: a dim track, a bright part for the fraction, and a short tick at each end."""
+    """An open ring: a dim track, a bright part for the fraction, and a short tick at each end.
+
+    `reveal` (0..1) draws only that much of the ring from its start, as when a gauge arrives."""
     if backing:
         _backing(painter, center, radius + 6)
     rect = QRectF(center.x() - radius, center.y() - radius, 2 * radius, 2 * radius)
@@ -43,18 +45,22 @@ def _arc(
     pen.setCapStyle(Qt.FlatCap)
     painter.setPen(pen)
     painter.setBrush(Qt.NoBrush)
-    painter.drawArc(rect, ARC_START, ARC_SWEEP)
-    fraction = min(max(fraction, 0.0), 1.0)
+    reveal = min(max(reveal, 0.0), 1.0)
+    if reveal > 0:
+        painter.drawArc(rect, ARC_START, int(ARC_SWEEP * reveal))
+    fraction = min(max(fraction, 0.0), reveal)
     if fraction > 0:
         pen.setColor(theme.accent)
         painter.setPen(pen)
         painter.drawArc(rect, ARC_START, int(ARC_SWEEP * fraction))
     end_deg = ARC_START_DEG - ARC_SPAN_DEG
     for degrees, colour in ((ARC_START_DEG, theme.accent), (end_deg, theme.track)):
+        if reveal < 1.0 and colour is theme.track:
+            continue  # the far end of the ring is only there once the ring has swept all the way round
         painter.setPen(QPen(colour, width + 0.6, Qt.SolidLine, Qt.FlatCap))
         start, stop = _radial(center, radius, degrees, END_TICK_LENGTH, 1.0)
         painter.drawLine(start, stop)
-    if theme.ring_ticks:
+    if theme.ring_ticks and reveal >= 1.0:
         _ticks(painter, center, radius + width + 3, fraction, theme)
 
 
@@ -72,13 +78,31 @@ def _ticks(painter: QPainter, center: QPointF, radius: float, fraction: float, t
 
 
 def draw_value_gauge(
-    painter: QPainter, center: QPointF, radius: float, fraction: float, label: str, value: str, unit: str, theme: Theme, backing: bool = False
+    painter: QPainter,
+    center: QPointF,
+    radius: float,
+    fraction: float,
+    label: str,
+    value: str,
+    unit: str,
+    theme: Theme,
+    backing: bool = False,
+    value_scale: float = 1.0,
+    label_alpha: float = 1.0,
+    ring_alpha: float = 1.0,
+    value_alpha: float = 1.0,
+    reveal: float = 1.0,
 ) -> None:
     """Open ring with a label above the value and a unit below, as for SPEED and ALTITUDE.
 
-    Bare arcs on the booster's bar; the ship's bar (`backing`) puts a faint dark disc behind them.
+    Bare arcs on the booster's bar; the ship's bar (`backing`) puts a faint dark disc behind them. While a gauge arrives or
+    leaves, its three parts come and go one after another: the label and unit, the ring (`reveal` is how far round it
+    has swept) and the number, each with its own alpha.
     """
-    _arc(painter, center, radius, fraction, theme, theme.ring_width, backing=backing)
+    base = painter.opacity()
+    painter.setOpacity(base * ring_alpha)
+    _arc(painter, center, radius, fraction, theme, theme.ring_width, backing=backing, reveal=reveal)
+    painter.setOpacity(base * label_alpha)
     box = QRectF(center.x() - radius, center.y() - radius, 2 * radius, 2 * radius)
 
     small = theme.make_font(theme.gauge_label_px or theme.label_px, theme.label_weight, theme.label_tracking)
@@ -86,7 +110,8 @@ def draw_value_gauge(
     # The three lines sit close together, as on the overlay: label above the number, unit just below it.
     wide = QRectF(centre_x - radius, 0, 2 * radius, 0)  # a column as wide as the ring, positioned per line below
     draw_text(painter, QRectF(wide.left(), center.y() - radius * 0.575, wide.width(), 20), Qt.AlignHCenter | Qt.AlignTop, label, small, theme.soft)
-    value_font = theme.make_font(theme.value_px, theme.clock_weight, 4.2, wide=True)
+    painter.setOpacity(base * value_alpha)
+    value_font = theme.make_font(round(theme.value_px * value_scale), theme.clock_weight, theme.value_spacing, wide=True)
     draw_text(
         painter,
         QRectF(box.left() - 20, center.y() - 27, box.width() + 40, 52),
@@ -97,7 +122,9 @@ def draw_value_gauge(
         theme.value_embolden,
         theme.digit_xscale,
     )
+    painter.setOpacity(base * label_alpha)
     draw_text(painter, QRectF(wide.left(), center.y() + radius * 0.29, wide.width(), 20), Qt.AlignHCenter | Qt.AlignTop, unit, small, theme.soft)
+    painter.setOpacity(base)
 
 
 def _ring_counts(total: int) -> list[int]:
@@ -151,6 +178,20 @@ def _engine_dot_scale(total: int, index: int) -> float:
     return 1.0
 
 
+def _dot_wave(total: int, index: int) -> tuple[float, float]:
+    """When engine `index` swells in as a cluster arrives (0..1): from the centre outwards, ring by ring, as on the overlay."""
+    if total == 6:
+        return (0.1, 0.5) if index < 3 else (0.45, 0.95)
+    counts = [1] if total == 1 else [3, 10, 20] if total == 33 else _ring_counts(total)
+    ring, before = 0, 0
+    for ring, count in enumerate(counts):
+        if index < before + count:
+            break
+        before += count
+    share = 0.0 if len(counts) == 1 else ring / (len(counts) - 1)
+    return 0.1 + 0.45 * share, 0.5 + 0.45 * share
+
+
 def _engine_positions(total: int) -> list[tuple[float, float]]:
     """Concentric rings of engine positions inside a unit circle."""
     if total <= 0:
@@ -202,18 +243,29 @@ def draw_engine_cluster(
     lit: tuple[bool, ...] = (),
     grow: float = 1.0,
     levels: list[float] | None = None,
+    ring: float | None = None,
+    dots_alpha: float = 1.0,
+    ring_alpha: float = 1.0,
+    ring_reveal: float = 1.0,
 ) -> None:
     """Engine dots inside the current stage's fuel ring. Lit engines are bright, the rest dim.
 
     `lit` says which dot is which engine; without it the first `engines_on` dots are lit. `grow` (0..1) draws the
     cluster in: the ring sweeps round and the dots swell from nothing. `levels` (0 dim .. 1 lit, per dot) overrides
-    `lit`, so a dot can be part way between the two while it fades.
+    `lit`, so a dot can be part way between the two while it fades. `ring` (0..1) is how far the fuel ring has filled;
+    it follows `grow` unless given, so the ring can fill later and slower than the dots appear. `dots_alpha` and
+    `ring_alpha` fade the dots and the ring apart from each other, and `ring_reveal` (1..0) draws the ring back in on itself,
+    as when the cluster leaves.
     """
-    _arc(painter, center, radius, fuel_fraction * grow, theme, theme.ring_width + 1.2)
+    base = painter.opacity()
+    painter.setOpacity(base * ring_alpha)
+    _arc(painter, center, radius, fuel_fraction * (grow if ring is None else ring), theme, theme.ring_width + 1.2, reveal=ring_reveal)
+    painter.setOpacity(base * dots_alpha)
     inner_ring = QColor(theme.soft)
     inner_ring.setAlpha(70)
     painter.setPen(QPen(inner_ring, 1.0))
     painter.setBrush(Qt.NoBrush)
+    painter.setOpacity(base * dots_alpha * min(grow / 0.15, 1.0))  # the thin circle is the first thing there
     painter.drawEllipse(center, radius * 0.86, radius * 0.86)  # the thin circle round the engine dots
     positions = _engine_positions(engines_total)
     inner = radius * 0.74
@@ -225,8 +277,11 @@ def draw_engine_cluster(
             painter.setBrush(_mix(theme.dim, theme.text, levels[i]))
         else:
             painter.setBrush(theme.text if on else theme.dim)
-        size = dot * _engine_dot_scale(engines_total, i) * grow
+        start, end = _dot_wave(engines_total, i)
+        swell = 1.0 if grow >= 1.0 else min(max((grow - start) / (end - start), 0.0), 1.0)  # each ring swells in its turn
+        size = dot * _engine_dot_scale(engines_total, i) * swell
         painter.drawEllipse(QPointF(center.x() + ux * inner, center.y() + uy * inner), size, size)
+    painter.setOpacity(base)
 
 
 def draw_map_dial(
@@ -274,6 +329,7 @@ def draw_attitude_dial(
     pitch_deg: float | None,
     theme: Theme,
     rocket_image: QImage | None = None,
+    rocket_scale: float = 1.0,
 ) -> None:
     """The attitude globe: a horizon ellipse with north and the compass lines, and the rocket on it.
 
@@ -286,8 +342,12 @@ def draw_attitude_dial(
     outline.setAlpha(135)
     painter.setPen(QPen(outline, 1.3))
     painter.setBrush(Qt.NoBrush)
-    painter.drawEllipse(center, radius, radius)
-    painter.drawEllipse(center, radius, radius * math.sin(math.radians(VIEW_ELEVATION_DEG)))  # the horizon plane
+    painter.drawArc(QRectF(center.x() - radius, center.y() - radius, 2 * radius, 2 * radius), 0, 180 * 16)  # the far half of the circle, behind the rocket
+    painter.drawArc(
+        QRectF(center.x() - radius, center.y() - radius * math.sin(math.radians(VIEW_ELEVATION_DEG)), 2 * radius, 2 * radius * math.sin(math.radians(VIEW_ELEVATION_DEG))),
+        0,
+        180 * 16,
+    )  # and of the horizon ellipse
 
     faint = QColor(outline)
     faint.setAlpha(95)
@@ -306,17 +366,31 @@ def draw_attitude_dial(
     painter.setPen(theme.soft)
     painter.drawText(QRectF(label_centre.x() - 12, label_centre.y() - 12, 24, 24), Qt.AlignCenter, "N")
 
+    def outline_arcs(start_degrees: int) -> None:
+        """Half of each of the dial's outlines (the outer circle and the horizon ellipse): the upper half from 0 degrees, the lower from 180."""
+        painter.setPen(QPen(outline, 1.3))
+        painter.setBrush(Qt.NoBrush)
+        for height in (radius, radius * math.sin(math.radians(VIEW_ELEVATION_DEG))):
+            painter.drawArc(QRectF(center.x() - radius, center.y() - height, 2 * radius, 2 * height), start_degrees * 16, 180 * 16)
+
+    def outer_ring() -> None:
+        """The near (lower) half of the outlines, drawn last so the rocket, which is bigger than the dial, passes behind it."""
+        outline_arcs(180)
+
     if pitch_deg is None:
+        outer_ring()
         return
     if rocket_image is not None:
-        side = rocket_pixels(radius)
+        side = rocket_pixels(radius) * rocket_scale
         painter.drawImage(QRectF(center.x() - side / 2, center.y() - side / 2, side, side), rocket_image)
+        outer_ring()
         return
     painter.save()
     painter.translate(center)
     painter.rotate(pitch_deg)
-    _draw_rocket(painter, radius * ROCKET_LENGTH, radius * 0.135, theme)
+    _draw_rocket(painter, radius * ROCKET_LENGTH * rocket_scale, radius * 0.135 * rocket_scale, theme)
     painter.restore()
+    outer_ring()
 
 
 def rocket_pixels(radius: float) -> float:

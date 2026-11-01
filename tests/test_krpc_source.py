@@ -426,6 +426,7 @@ def test_reads_maneuver_nodes_and_the_orbit():
         assert sample.node_uts == (1200.0, 1900.0)  # soonest first
         assert (sample.apoapsis_km, sample.periapsis_km) == (150.0, 110.0)
         assert sample.reentry_ut is None  # the orbit stays above 70 km
+        assert sample.landing_ut is None
     finally:
         reader.stop()
 
@@ -436,6 +437,7 @@ def test_predicts_when_a_dipping_orbit_comes_down_through_70_km():
     try:
         assert wait_for(lambda: reader.snapshot().sample is not None)
         assert reader.snapshot().sample.reentry_ut == 1500.0
+        assert reader.snapshot().sample.landing_ut == 1500.0  # the same orbit comes down through 800 m too
     finally:
         reader.stop()
 
@@ -554,6 +556,29 @@ def test_zero_throttle_means_zero_thrust():
         reader.stop()
 
 
+def test_a_kRPC_server_of_another_version_is_reported_as_a_version_mismatch_not_a_missing_server():
+    from ground_station.krpc_source import EXPECTED_KRPC_VERSION, KRPC_DOWNLOAD_URL, connection_failure_text
+
+    text = connection_failure_text("127.0.0.1", 50000, ValueError("Invalid type"))
+    assert "version mismatch" in text and EXPECTED_KRPC_VERSION in text and KRPC_DOWNLOAD_URL in text and "0.7.0" in text
+    assert "is the kRPC server started" not in text and "ValueError: Invalid type" in text  # the real error stays visible
+    other = connection_failure_text("127.0.0.1", 50000, ConnectionRefusedError("refused"))
+    assert "kRPC not reachable at 127.0.0.1:50000" in other and "version mismatch" not in other
+
+
+def test_the_reader_says_so_when_the_server_is_the_wrong_kRPC_version():
+    def refuse():
+        raise ValueError("Invalid type")
+
+    reader = make_reader(refuse)
+    reader.start()
+    try:
+        assert wait_for(lambda: "version mismatch" in (reader.snapshot().error or ""))
+        assert reader.snapshot().state is ConnState.CONNECTING
+    finally:
+        reader.stop()
+
+
 @pytest.mark.parametrize("missing", [("Thrust", "Mode"), ("Mode",), ("Thrust",)])
 def test_a_mod_version_without_the_switch_fields_does_not_drop_the_connection(missing):
     """Seen with another version of the booster mod: kRPC answered "Sequence contains no matching element" and the reader went to SIGNAL LOST."""
@@ -587,3 +612,15 @@ def test_a_dropped_connection_is_still_a_lost_signal_with_missing_switch_fields(
         assert wait_for(lambda: reader.snapshot().state is ConnState.LOST)
     finally:
         reader.stop()
+
+
+def test_body_constants_come_from_the_game_and_missing_ones_are_none():
+    from types import SimpleNamespace
+
+    from ground_station.krpc_source import _Streams
+
+    kerbin = SimpleNamespace(body=SimpleNamespace(surface_gravity=9.81, atmosphere_depth=70_000.0))
+    assert _Streams._body_constants(kerbin) == (9.81, 5600.0)
+    airless = SimpleNamespace(body=SimpleNamespace(surface_gravity=1.63, atmosphere_depth=0.0))
+    assert _Streams._body_constants(airless) == (1.63, None)
+    assert _Streams._body_constants(SimpleNamespace()) == (None, None)

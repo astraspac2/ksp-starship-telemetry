@@ -84,3 +84,12 @@ def test_dot_turns_white_over_a_short_animation_once_passed():
     assert 0.0 < passed_progress(143.0 + FILL_DURATION / 2, 143.0) < 1.0
     assert passed_progress(143.0 + FILL_DURATION, 143.0) == pytest.approx(1.0)
     assert passed_progress(500.0, 143.0) == 1.0  # joining late: just a finished white dot
+
+
+def test_the_show_hide_switch_plays_the_same_rise_forward_and_backward():
+    for shown in (0.0, 0.3, 0.7, 1.0):
+        state = panels_state(5.0, shown)  # long after the countdown rise: only the switch limits it
+        assert state.opacity == shown
+        assert state.offset == pytest.approx(panels_state(-10.0 + shown * 1.0).offset)  # the offset at the same point of the first rise
+    assert panels_state(-12.0, 1.0).opacity == 0.0  # before the countdown the panels are away whatever the switch says
+    assert panels_state(-9.5, 1.0) == panels_state(-9.5)  # the countdown alone behaves as before

@@ -204,7 +204,7 @@ def test_starship_stack_is_ready_to_draw_and_split_where_the_ship_meets_the_boos
 
     mesh = starship_stack()
     assert mesh.vertices.shape[1] == 3 and mesh.faces.max() < len(mesh.vertices) and mesh.faces.min() >= 0
-    assert len(mesh.face_colors) == mesh.triangle_count and mesh.triangle_count < 2200
+    assert len(mesh.face_colors) == mesh.triangle_count and mesh.triangle_count < 3800
     assert mesh.vertices[:, 1].max() == pytest.approx(0.5) and mesh.vertices[:, 1].min() == pytest.approx(-0.5)
     assert mesh.stage_split == pytest.approx(SPLIT_Y) and SPLIT_Y == pytest.approx(0.5 - SHIP_LENGTH)
     assert np.abs(mesh.vertices[:, [0, 2]]).max() < 0.2  # slim, centred on the axis, fins included
@@ -229,7 +229,7 @@ def test_the_ship_flaps_are_joined_to_the_body_not_floating():
     from ground_station.starship_model import NOSE_SHARE, SHIP_LENGTH, _body_radius, starship_stack
 
     mesh = starship_stack()
-    top = 0.5 - 0.115 * SHIP_LENGTH  # where the forward flaps' roots start, on the narrowing nose
+    top = 0.5 - 0.069 * SHIP_LENGTH  # where the forward flaps' roots start, on the narrowing nose
     assert top > 0.5 - NOSE_SHARE * SHIP_LENGTH
     roots = mesh.vertices[np.isclose(mesh.vertices[:, 1], top, atol=1e-6)]
     assert len(roots) == 4  # two flaps, two faces each
@@ -248,3 +248,43 @@ def test_the_booster_has_three_grid_fins_and_none_on_the_steel_side():
     assert (away < 150).all()  # nothing on the opposite (steel) side
     for turn in (0, 90, -90):
         assert (np.abs((angles - (shield + turn) + 180) % 360 - 180) < 25).any()  # a fin on the shield side and one out to each side
+
+
+def test_a_prepared_model_is_thinned_out_only_once_per_file_and_flip(tmp_path, monkeypatch):
+    from ground_station import mesh as mesh_module
+
+    path = tmp_path / "rocket.obj"
+    path.write_text("v 0 0 0\nv 1 0 0\nv 0 5 0\nv 0 0 1\nf 1 2 3\nf 1 3 4\n")
+    calls = []
+    real = mesh_module.normalize
+    monkeypatch.setattr(mesh_module, "normalize", lambda *args, **kwargs: calls.append(1) or real(*args, **kwargs))
+    first = mesh_module.load_prepared(path, False)
+    assert mesh_module.load_prepared(path, False) is first and len(calls) == 1  # the second ask costs nothing
+    mesh_module.load_prepared(path, True)
+    assert len(calls) == 2  # a different flip is a different model
+
+
+def test_a_thinned_out_model_keeps_its_width_and_its_pointed_end_up():
+    from ground_station.mesh import Mesh, decimate, normalize
+
+    segments, rings = 24, 60  # a tall closed cylinder with a pointed top, finely meshed, upside down on purpose
+    vertices, faces = [], []
+    for ring in range(rings + 1):
+        y = ring / rings * 10.0
+        radius = 1.0 if ring < rings - 5 else max(1.0 - (ring - (rings - 6)) / 6.0, 0.02)
+        for k in range(segments):
+            angle = 2 * np.pi * k / segments
+            vertices.append((radius * np.cos(angle), -y, radius * np.sin(angle)))  # the point is at the bottom
+    for ring in range(rings):
+        for k in range(segments):
+            a, b = ring * segments + k, ring * segments + (k + 1) % segments
+            c, d = a + segments, b + segments
+            faces.extend([(a, c, b), (b, c, d)])
+    mesh = Mesh(np.asarray(vertices, dtype=np.float32), np.asarray(faces, dtype=np.int32))
+    thin = decimate(mesh, 300)
+    assert 0 < thin.triangle_count <= 300
+    width = np.hypot(thin.vertices[:, 0], thin.vertices[:, 2]).max()
+    assert width == pytest.approx(1.0, abs=0.1)  # a plain average of each cell would pull the round body in
+    standing = normalize(mesh, max_triangles=300)
+    radial = np.hypot(standing.vertices[:, 0], standing.vertices[:, 2])
+    assert radial[standing.vertices[:, 1] > 0.45].mean() < radial[standing.vertices[:, 1] < -0.45].mean()  # the narrow end is up

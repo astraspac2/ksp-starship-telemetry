@@ -9,12 +9,13 @@ from pathlib import Path
 from .branding import DEFAULT_FLIGHT_LABEL, DEFAULT_PAD_LABEL, SETTINGS_FOLDER
 from .auto_markers import auto_markers_from_dicts, auto_markers_to_dicts
 from .events import DEFAULT_EVENTS, DEFAULT_PAD_EVENTS, events_from_dicts, events_to_dicts
+from .resolution import CHOICES as RESOLUTION_CHOICES
 from .units import ALTITUDE_UNITS, SPEED_UNITS, THRUST_UNITS
 
 REFRESH_HZ = (20, 30, 60)
 WARP_POLICIES = ("follow", "hold")  # countdown follows game time through time warp, or holds while warping
 THEMES = ("A - Starship-accurate", "B - Glass", "C - Mission control", "D - Forest")
-PANEL_THEMES = ("aerospace", "forest")
+PANEL_THEMES = ("aerospace", "forest", "deepspace", "mars", "custom")
 BACKGROUNDS = ("transparent", "solid")
 ALTITUDE_MODES = ("surface", "sea")  # above the ground/sea, or above sea level
 VIEW_MODES = ("flight", "pad")  # the bar for a flight, or for the pad and a static fire
@@ -54,7 +55,13 @@ class Settings:
     accent: str = ""  # "" = the look's own accent, else "#RRGGBB"
     panel_opacity: float | None = None  # None = the look's own; else 0..1 for the plates behind the gauges
     hud_scale: float = 1.0
-    font: str = ""  # "" = automatic (bundled D-DIN, then system)
+    resolution: str = "auto"  # the monitor's resolution the HUD is scaled to (resolution.py): "auto" takes the screen it is on
+    show_panels: bool = True  # the side panels (gauges, engine cluster and dial) of the flight bar; off, they sink away
+    reentry_glow: bool = True  # the ship's heat shield glows in the 3D dial while it comes down through the air
+    flap_roll: bool = True  # the ship's flaps in the 3D dial follow the roll input
+    flap_yaw: bool = True  # and the yaw input (deploy, retract and pitch always show)
+    ship_scale: float = 1.0  # the 3D dial's rocket size once only the ship is left, as a multiple of its normal size
+    font: str = ""  # "" = automatic (bundled Oxanium, then D-DIN)
     background: str = "transparent"
     background_color: str = "#00FF00"  # chroma-key green for capture software
     on_top: bool = True
@@ -69,6 +76,8 @@ class Settings:
     # looks
     theme: str = THEMES[0]
     panel_theme: str = PANEL_THEMES[0]
+    panel_image: str = ""  # the control panel's own background picture, used by the "custom" look
+    panel_image_dim: int = 55  # how much that picture is darkened, per cent, so the controls stay readable
 
     @property
     def mission_label(self) -> str:
@@ -112,16 +121,19 @@ class Settings:
             ("view_mode", VIEW_MODES),
             ("altitude_mode", ALTITUDE_MODES),
             ("background", BACKGROUNDS),
+            ("resolution", RESOLUTION_CHOICES),
         ):
             one_of(name, allowed)
         within("rpc_port", 1, 65535)
         within("stream_port", 1, 65535)
         within("countdown_seconds", 1, 24 * 3600)
         within("hud_scale", 0.5, 2.0)
+        within("ship_scale", 0.5, 2.0)
         within("timeline_nodes", 1, 20)
-        for name in ("address", "subtitle", "pad_subtitle", "font", "vessel_model", "accent", "background_color"):
+        within("panel_image_dim", 0, 90)
+        for name in ("address", "subtitle", "pad_subtitle", "font", "vessel_model", "accent", "background_color", "panel_image"):
             text(name)
-        for name in ("auto_connect", "show_pill", "show_bar", "on_top", "click_through", "show_badge", "show_map", "show_timeline", "vessel_model_flip", "starship_model"):
+        for name in ("auto_connect", "show_pill", "show_bar", "on_top", "click_through", "show_badge", "show_map", "show_timeline", "vessel_model_flip", "starship_model", "flap_roll", "flap_yaw", "show_panels", "reentry_glow"):
             flag(name)
         if not fixed.address.strip():
             fixed.address = defaults.address

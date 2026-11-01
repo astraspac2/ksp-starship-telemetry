@@ -5,9 +5,10 @@ Qt-free so it can be unit-tested. The panel only calls this; the display windows
 
 import time
 from dataclasses import replace
+from pathlib import Path
 from typing import Callable
 
-from .auto_markers import AutoMarker, AutoMarkerTracker, NodeProposal, auto_markers_from_dicts, auto_markers_to_dicts
+from .auto_markers import LATE_MARKER_KINDS, LATE_MARKER_VISIBLE_FROM, AutoMarker, AutoMarkerTracker, NodeProposal, auto_markers_from_dicts, auto_markers_to_dicts
 from .clock import ClockState, CountdownClock
 from .events import Event, events_from_dicts, events_to_dicts
 from .krpc_source import ConnState, KrpcReader, ReaderStatus
@@ -15,6 +16,7 @@ from .live import live_telemetry
 from .mock_game import MockGame
 from .settings import Settings
 from .source import DataSource
+from .staging_trace import StagingTrace
 from .telemetry import Telemetry, mock_pad_telemetry, mock_telemetry
 from .layout import stage_sep_time
 from .separation import SeparationDetector
@@ -31,8 +33,12 @@ class Session:
         settings: Settings,
         reader_factory: Callable[..., KrpcReader] = KrpcReader,
         game_time: Callable[[], float] = time.monotonic,
+        trace: StagingTrace | None = None,
+        booster_log: Path | None = None,
     ):
         self.settings = settings
+        self._booster_log = booster_log  # where the reader writes a record when the booster is lost
+        self.trace = trace  # a record of what the game reported around a staging, when wanted
         self._reader_factory = reader_factory
         self.mock_game = MockGame(now=game_time)  # the mock source's stand-in for KSP's game clock
         self._reader: KrpcReader | None = None
@@ -105,8 +111,10 @@ class Session:
         if self._reader is not None:
             return
         s = self.settings
-        self._reader = self._reader_factory(s.address.strip(), s.rpc_port, s.stream_port)
+        extra = {} if self._booster_log is None else {"booster_log": self._booster_log}
+        self._reader = self._reader_factory(s.address.strip(), s.rpc_port, s.stream_port, **extra)
         self._reader.altitude_mode = s.altitude_mode
+        self._reader.flap_roll, self._reader.flap_yaw = s.flap_roll, s.flap_yaw
         self._reader.start()
 
     def connect_on_start(self) -> None:
@@ -128,6 +136,12 @@ class Session:
         self.settings.altitude_mode = mode
         if self._reader is not None:
             self._reader.altitude_mode = mode
+
+    def set_flap_axes(self, roll: bool, yaw: bool) -> None:
+        """Whether the ship's flaps in the 3D dial follow the roll and the yaw input."""
+        self.settings.flap_roll, self.settings.flap_yaw = roll, yaw
+        if self._reader is not None:
+            self._reader.flap_roll, self._reader.flap_yaw = roll, yaw
 
     def reader_status(self) -> ReaderStatus:
         return self._reader.snapshot() if self._reader is not None else NOT_CONNECTED
@@ -154,6 +168,27 @@ class Session:
         self.t = self.clock.last_t
         self.separation.reset()
 
+    def can_jump_to_mission_time(self) -> bool:
+        """Whether KSP is reporting a running mission clock (live, a fresh reading, mission time past zero)."""
+        status = self.reader_status()
+        return (
+            self.source is DataSource.LIVE
+            and status.sample is not None
+            and status.state is ConnState.CONNECTED
+            and not status.stale
+            and status.sample.met > 0
+        )
+
+    def jump_to_mission_time(self) -> float | None:
+        """Set the bar's clock to KSP's mission time as it is now, which differs every flight. Returns that time, or None
+        when KSP has no running mission clock to jump to. Only reads from the game."""
+        if not self.can_jump_to_mission_time():
+            return None
+        sample = self.reader_status().sample
+        self.clock.sync_to_mission_time(sample.ut, sample.met)
+        self.t = sample.met
+        return sample.met
+
     def abort_countdown(self) -> None:
         """Scrub the countdown on the display. Nothing is sent to KSP."""
         self.clock.abort()
@@ -175,6 +210,8 @@ class Session:
             self.t = telemetry.t
             self._watch_game(status, telemetry)
         separated = self.separation.update(telemetry.t, telemetry.engines_total, telemetry.status is None)
+        if self.trace is not None and self.source is DataSource.LIVE:
+            self.trace.add(telemetry.t, telemetry.engines_total, telemetry.engines_on, separated, telemetry.status)
         telemetry = replace(telemetry, separated_at=None if self.pad_mode else separated)  # the pad has no stage separation
         if self.clock.state is ClockState.ABORTED:
             telemetry = replace(telemetry, status=ABORT_STATUS)
@@ -194,6 +231,9 @@ class Session:
             sample.node_uts,
             sample.altitude_m / 1000.0,
             sample.reentry_ut,
+            sample.landing_ut,
+            sample.gravity_ms2,
+            sample.scale_height_m,
         )
         if self.auto.take_changed():
             self.sync_auto_markers()
@@ -264,7 +304,16 @@ class Session:
     def milestones(self) -> list[Milestone]:
         """Enabled planned events, automatic markers and manual markers, in time order, for the bar's timeline."""
         planned = [Milestone(e.label.upper(), e.time) for e in self.events if e.enabled]
-        automatic = [] if self.pad_mode else [Milestone(m.name.upper(), m.time) for m in self.auto_markers if m.enabled]
+        late = self.t < LATE_MARKER_VISIBLE_FROM  # re-entry and landing burn would only crowd the bar during the launch
+        automatic = (
+            []
+            if self.pad_mode
+            else [
+                Milestone(m.name.upper(), m.time)
+                for m in self.auto_markers
+                if m.enabled and not (late and m.kind in LATE_MARKER_KINDS)
+            ]
+        )
         return sorted(planned + automatic + self.markers, key=lambda m: m.time)
 
     def shutdown(self) -> None:

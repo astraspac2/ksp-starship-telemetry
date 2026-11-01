@@ -8,12 +8,16 @@ import math
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
+from pathlib import Path
 from typing import Callable
 
 from . import sep_cluster
+from .booster import BoosterTracker
 from .branding import KRPC_CLIENT_NAME
+from .flaps import FlapTracker
+from .heating import glow_target
 from .attitude import attitude_from_rotation
 
 STALE_AFTER_SECONDS = 1.0
@@ -24,7 +28,11 @@ FUEL_FLOW_WINDOW = 0.5  # seconds of tank readings the fuel flow is measured ove
 FUEL_FLOW_MIN_SPAN = 0.25  # and the least span that gives a trustworthy rate
 MIN_NOZZLE_THRUST_N = 1000.0  # below this per nozzle an "engine" is a placeholder, not propulsion
 EXTRAS_SECONDS = 0.5  # maneuver nodes and the re-entry prediction are read this often; they change slowly
+EXPECTED_KRPC_VERSION = "0.6.0"  # the kRPC mod this app is built and tested with; a newer one (0.7.0) does not connect
+KRPC_DOWNLOAD_URL = "github.com/krpc/krpc/releases/tag/v0.6.0"
 REENTRY_ALTITUDE_M = 70_000.0  # where the re-entry prediction looks for the vessel coming down
+LANDING_BURN_ALTITUDE_M = 800.0  # and where the landing burn prediction does
+KERBIN_ATMOSPHERE_SCALE_HEIGHTS = 12.5  # Kerbin's 70 km of air is this many scale heights deep (5.6 km each)
 
 
 class ConnState(Enum):
@@ -56,9 +64,18 @@ class LiveSample:
     apoapsis_km: float | None = None  # of the current orbit, above sea level
     periapsis_km: float | None = None
     reentry_ut: float | None = None  # game time the orbit will next come down through 70 km, if it dips that low
+    landing_ut: float | None = None  # the same for 800 m
+    gravity_ms2: float | None = None  # the world's surface gravity, for working out a landing
+    scale_height_m: float | None = None  # and roughly how fast its air thins with height
     thrust_n: float | None = None  # total thrust of the engines being flown, in newtons; None = burning but not known
     max_thrust_n: float | None = None  # what those engines would give at full throttle; None = not known
     throttle: float | None = None  # the throttle setting, 0..1
+    booster_speed_ms: float | None = None  # the booster left behind at separation, while the game still reports it
+    booster_altitude_m: float | None = None
+    booster_live: bool = False
+    has_booster_cluster: bool = False  # the vessel being flown carries the booster's engine cluster (the stack, or the booster itself)
+    heat_glow: float = 0.0  # how strongly the ship's heat shield should glow on re-entry, 0..1 (heating.py)
+    flap_folds_deg: tuple[float, ...] | None = None  # how far in each of the ship's four flaps is folded from deployed (see flaps.py); None = not known
 
 
 @dataclass(frozen=True)
@@ -146,6 +163,8 @@ class _Streams:
         self.warp_rate = conn.add_stream(getattr, conn.space_center, "warp_rate")
         self.speed = conn.add_stream(getattr, flight, "speed")
         self.altitude_surface = conn.add_stream(getattr, flight, "surface_altitude")  # above the ground/sea
+        self.dynamic_pressure = conn.add_stream(getattr, flight, "dynamic_pressure")  # for the re-entry glow
+        self.vertical_speed = conn.add_stream(getattr, flight, "vertical_speed")
         self.altitude_sea = conn.add_stream(getattr, flight, "mean_altitude")  # above sea level
         self.rotation = conn.add_stream(vessel.rotation, vessel.surface_reference_frame)
         self.latitude = conn.add_stream(getattr, flight, "latitude")
@@ -153,8 +172,9 @@ class _Streams:
         orbit = vessel.orbit
         self.apoapsis = conn.add_stream(getattr, orbit, "apoapsis_altitude")
         self.periapsis = conn.add_stream(getattr, orbit, "periapsis_altitude")
+        self.body_gravity, self.body_scale_height = self._body_constants(orbit)
         self._extras_at: float | None = None
-        self._extras: tuple[tuple[float, ...], float | None] = ((), None)
+        self._extras: tuple[tuple[float, ...], float | None, float | None] = ((), None, None)
         self.situation = conn.add_stream(getattr, vessel, "situation")
         self.current_stage = conn.add_stream(getattr, vessel.control, "current_stage")
         self.built_at_stage = self.current_stage()
@@ -260,26 +280,50 @@ class _Streams:
         thrust = sep_cluster.cluster_thrust_n(sum(pattern), producing, first, first_nozzles, total_kn, each, self.throttle())
         return pattern, thrust, None if each is None else each * sep_cluster.CLUSTER_ENGINES
 
-    def _reentry_ut(self, ut: float) -> float | None:
-        """Game time the orbit next comes down through 70 km, or None when it never gets that low (or is already below)."""
+    @staticmethod
+    def _body_constants(orbit) -> tuple[float | None, float | None]:
+        """The world's surface gravity and air scale height, or None for what the game does not say (or has no air)."""
+        try:
+            body = orbit.body
+            gravity = float(body.surface_gravity)
+            gravity = gravity if math.isfinite(gravity) and gravity > 0 else None
+        except Exception:
+            body, gravity = None, None
+        try:
+            depth = float(body.atmosphere_depth)
+            height = depth / KERBIN_ATMOSPHERE_SCALE_HEIGHTS if math.isfinite(depth) and depth > 0 else None
+        except Exception:
+            height = None
+        return gravity, height
+
+    def _coming_down_ut(self, ut: float, altitude_m: float) -> float | None:
+        """Game time the orbit next comes down through `altitude_m`, or None when it never gets that low (or is already below)."""
         orbit = self._vessel.orbit
-        radius = orbit.body.equatorial_radius + REENTRY_ALTITUDE_M
+        radius = orbit.body.equatorial_radius + altitude_m
         if not (orbit.periapsis < radius < orbit.apoapsis):
             return None
         anomaly = orbit.true_anomaly_at_radius(radius)  # on the way up; the way down is its mirror image
         crossing = orbit.ut_at_true_anomaly(2.0 * math.pi - anomaly)
         return crossing if crossing > ut else None
 
-    def _read_extras(self, now: float, ut: float) -> tuple[tuple[float, ...], float | None]:
+    def _read_extras(self, now: float, ut: float) -> tuple[tuple[float, ...], float | None, float | None]:
         if self._extras_at is None or now - self._extras_at >= EXTRAS_SECONDS:
             self._extras_at = now
             nodes = tuple(sorted(node.ut for node in self._vessel.control.nodes))
             try:
-                reentry = self._reentry_ut(ut)
+                reentry = self._coming_down_ut(ut, REENTRY_ALTITUDE_M)
+                landing = self._coming_down_ut(ut, LANDING_BURN_ALTITUDE_M)
             except Exception:  # an orbit the maths cannot handle (escape, no orbit) just has no prediction
-                reentry = None
-            self._extras = (nodes, reentry)
+                reentry = landing = None
+            self._extras = (nodes, reentry, landing)
         return self._extras
+
+    def _heat_glow(self, speed: float) -> float:
+        """The re-entry glow's target: 0 where the game will not say (it is a decoration, never worth failing a reading for)."""
+        try:
+            return glow_target(self.dynamic_pressure(), speed, self.vertical_speed())
+        except Exception:
+            return 0.0
 
     def read(self, now: float) -> LiveSample:
         amount = sum(a() for a, _ in self.fuel)
@@ -304,11 +348,12 @@ class _Streams:
             rated = None if rated is None or part_rated is None else rated + part_rated
         pitch, heading, roll = attitude_from_rotation(self.rotation())
         ut = self.ut()
-        nodes, reentry_ut = self._read_extras(now, ut)
+        nodes, reentry_ut, landing_ut = self._read_extras(now, ut)
         apoapsis, periapsis = self.apoapsis(), self.periapsis()
+        speed = self.speed()
         return LiveSample(
             met=self.met(),
-            speed_ms=self.speed(),
+            speed_ms=speed,
             altitude_m=self.altitude_sea() if self._altitude_mode() == "sea" else self.altitude_surface(),
             fuel_fraction=(amount / capacity) if capacity > 0 else 0.0,
             pitch_deg=pitch,
@@ -325,12 +370,28 @@ class _Streams:
             apoapsis_km=apoapsis / 1000.0 if math.isfinite(apoapsis) else None,
             periapsis_km=periapsis / 1000.0 if math.isfinite(periapsis) else None,
             reentry_ut=reentry_ut,
+            landing_ut=landing_ut,
+            gravity_ms2=self.body_gravity,
+            scale_height_m=self.body_scale_height,
             thrust_n=thrust,
             max_thrust_n=rated if rated else None,
             throttle=self.throttle(),
+            heat_glow=self._heat_glow(speed),
             situation=str(getattr(self.situation(), "name", self.situation())),
             received_at=now,
         )
+
+
+def connection_failure_text(address: str, port: int, exc: Exception) -> str:
+    """What the operator is told when connecting fails. The server answered but spoke a different kRPC version
+    ("Invalid type": it described a data type this client does not know), which is not a missing server."""
+    message = f"{type(exc).__name__}: {exc}"
+    if "Invalid type" in str(exc):
+        return (
+            f"kRPC version mismatch: this app needs the kRPC {EXPECTED_KRPC_VERSION} mod in KSP, not a newer one (0.7.0 does not work). "
+            f"Download the older kRPC {EXPECTED_KRPC_VERSION} from {KRPC_DOWNLOAD_URL} - {message}"
+        )
+    return f"kRPC not reachable at {address}:{port} (is the kRPC server started in KSP?) - {message}"
 
 
 class KrpcReader:
@@ -343,6 +404,7 @@ class KrpcReader:
         clock: Callable[[], float] = time.monotonic,
         poll_interval: float = 0.05,
         retry_seconds: float = RETRY_SECONDS,
+        booster_log: Path | None = None,
     ):
         self._address, self._rpc_port, self._stream_port = address, rpc_port, stream_port
         self._connect_fn = connect_fn or self._default_connect
@@ -356,8 +418,12 @@ class KrpcReader:
         self._sample: LiveSample | None = None
         self._error: str | None = None
         self._server_version: str | None = None
+        self.flap_roll = True  # whether the ship's flaps in the dial follow the roll and yaw input; may change while running
+        self.flap_yaw = True
         self.altitude_mode = "surface"  # "surface" (above ground/sea) or "sea" (above sea level); may change while running
         self._rated_memory: dict[str, float] = {}
+        self._booster = BoosterTracker(booster_log)
+        self._flaps = FlapTracker(None if booster_log is None else booster_log.with_name("flap-trace.csv"))
 
     def _default_connect(self):
         import krpc
@@ -412,11 +478,7 @@ class KrpcReader:
                 if had_feed:
                     self._set(ConnState.LOST, message)
                 else:
-                    self._set(
-                        ConnState.CONNECTING,
-                        f"kRPC not reachable at {self._address}:{self._rpc_port} "
-                        f"(is the kRPC server started in KSP?) - {message}",
-                    )
+                    self._set(ConnState.CONNECTING, connection_failure_text(self._address, self._rpc_port, exc))
             finally:
                 if conn is not None:
                     try:
@@ -433,6 +495,8 @@ class KrpcReader:
 
     def _poll(self, conn) -> None:
         streams = _Streams(conn, lambda: self.altitude_mode, self._rated_memory)
+        self._booster.reset()
+        self._flaps.reset()
         with self._lock:
             self._server_version = self._read_server_version(conn)
         self._set(ConnState.CONNECTED, None)
@@ -444,9 +508,17 @@ class KrpcReader:
                 vessel_changed = conn.space_center.active_vessel.name != streams.vessel_name
                 if vessel_changed or streams.current_stage() != streams.built_at_stage:
                     streams = _Streams(conn, lambda: self.altitude_mode, self._rated_memory)  # staging drops parts: read afresh
+                    self._flaps.reset()
                 else:
                     streams.refresh_stage()
             sample = streams.read(now)
+            sample = replace(sample, has_booster_cluster=bool(streams.sep))
+            booster = self._booster.update(now, conn.space_center, bool(streams.sep), self.altitude_mode, conn)
+            if booster.live:
+                sample = replace(sample, booster_speed_ms=booster.speed_ms, booster_altitude_m=booster.altitude_m, booster_live=True)
+            folds = self._flaps.update(now, conn, self.flap_roll, self.flap_yaw)
+            if folds is not None:
+                sample = replace(sample, flap_folds_deg=folds)
             with self._lock:
                 self._sample = sample
             self._stop.wait(self._poll_interval)

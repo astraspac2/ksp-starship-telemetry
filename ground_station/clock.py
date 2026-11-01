@@ -76,6 +76,12 @@ class CountdownClock:
         if self._state in (ClockState.RUNNING, ClockState.HELD) and self._last_t < 0:
             self._state = ClockState.ABORTED
 
+    def sync_to_mission_time(self, ut: float, met: float) -> None:
+        """Put the clock at KSP's mission elapsed time right now and let it carry on from there, whatever state it was in."""
+        self._state = ClockState.RUNNING
+        self._liftoff_ut = ut - met
+        self._last_t = met
+
     def reset(self, countdown_seconds: float | None = None) -> None:
         if countdown_seconds is not None:
             self._seconds = countdown_seconds
