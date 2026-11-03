@@ -425,3 +425,44 @@ def test_a_flight_that_only_reaches_50_km_has_no_crossing_at_70_km():
     for t, alt in ((1, 10.0), (2, 50.0), (3, 45.0), (4, 20.0)):
         orbit_tick(tracker, t, 1000.0 + t, alt)
     assert reentries(markers) == []
+
+
+def clear_orbit_tick(tracker, t, ut, altitude, periapsis, reentry_ut=None, landing_ut=None):
+    tracker.update(float(t), t, ut, (), altitude, reentry_ut, landing_ut, None, None, periapsis)
+
+
+def test_the_markers_go_while_the_orbit_stays_out_of_the_air():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    clear_orbit_tick(tracker, 100, 1000.0, 90.0, -500.0, reentry_ut=1300.0)  # still suborbital: the path dips into the air
+    markers.append(AutoMarker("Landing burn", 1500.0, LANDING))  # one kept from an earlier flight
+    assert len(reentries(markers)) == 1
+    clear_orbit_tick(tracker, 200, 1100.0, 150.0, 140.0)  # now the lowest point is above 70 km
+    assert [m for m in markers if m.kind in (REENTRY, LANDING)] == []
+    assert tracker.take_changed()
+
+
+def test_the_markers_come_back_when_a_deorbit_puts_the_path_into_the_air_again():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    clear_orbit_tick(tracker, 100, 1000.0, 90.0, -500.0, reentry_ut=1300.0)
+    clear_orbit_tick(tracker, 200, 1100.0, 150.0, 140.0)
+    assert reentries(markers) == []
+    clear_orbit_tick(tracker, 300, 1200.0, 150.0, 20.0, reentry_ut=1500.0)  # a deorbit burn: the periapsis is in the air
+    assert len(reentries(markers)) == 1  # not mistaken for one the operator deleted
+
+
+def test_a_vessel_that_is_already_coming_down_keeps_its_markers():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    clear_orbit_tick(tracker, 100, 1000.0, 90.0, -500.0, reentry_ut=1300.0)
+    clear_orbit_tick(tracker, 200, 1100.0, 60.0, 200.0)  # below 70 km: never taken off, whatever the readings say
+    assert len(reentries(markers)) == 1
+
+
+def test_a_missing_periapsis_changes_nothing():
+    markers = []
+    tracker = AutoMarkerTracker(markers)
+    clear_orbit_tick(tracker, 100, 1000.0, 90.0, -500.0, reentry_ut=1300.0)
+    clear_orbit_tick(tracker, 200, 1100.0, 150.0, None)
+    assert len(reentries(markers)) == 1

@@ -234,6 +234,7 @@ class Session:
             sample.landing_ut,
             sample.gravity_ms2,
             sample.scale_height_m,
+            sample.periapsis_km,
         )
         if self.auto.take_changed():
             self.sync_auto_markers()

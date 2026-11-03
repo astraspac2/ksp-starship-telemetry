@@ -269,6 +269,7 @@ class AutoMarkerTracker:
         landing_ut: float | None = None,
         gravity: float | None = None,
         scale_height: float | None = None,
+        periapsis_km: float | None = None,
     ) -> None:
         """Take one reading: `wall` is real time, `t` the flight clock, `ut` game time, the rest as the game reports."""
         if ut is None:
@@ -276,6 +277,25 @@ class AutoMarkerTracker:
         self._follow_nodes(wall, t, ut, sorted(u for u in node_uts if u > ut))
         self._watch_landing(t, ut, altitude_km, landing_ut, gravity, scale_height)  # reads the previous altitude, so it goes before the re-entry watch
         self._watch_reentry(t, ut, altitude_km, reentry_ut)
+        self._drop_while_clear_of_the_air(altitude_km, periapsis_km)
+
+    def _drop_while_clear_of_the_air(self, altitude_km: float | None, periapsis_km: float | None) -> None:
+        """Take RE-ENTRY and LANDING BURN off the timeline while the orbit stays out of the atmosphere.
+
+        That is a vessel above 70 km whose lowest point is also above 70 km. They come back by themselves once a deorbit
+        puts the path into the air again. A vessel that is already coming down is never touched, and the markers are
+        forgotten, not 'deleted by the operator', so they are free to return.
+        """
+        if altitude_km is None or periapsis_km is None or not (math.isfinite(altitude_km) and math.isfinite(periapsis_km)):
+            return
+        if altitude_km <= REENTRY_ALTITUDE_KM or periapsis_km < REENTRY_ALTITUDE_KM:
+            return
+        kept = [m for m in self.markers if m.kind not in (REENTRY, LANDING)]
+        if len(kept) != len(self.markers):
+            self.markers[:] = kept
+            self._changed = True
+        self._reentry = self._landing = None
+        self._landing_estimate = None
 
     def _follow_nodes(self, wall: float, t: float, ut: float, nodes: list[float]) -> None:
         free = list(nodes)
