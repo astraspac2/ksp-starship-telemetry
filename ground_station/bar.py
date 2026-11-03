@@ -18,7 +18,7 @@ from .earth_map import MapRenderer
 from .gauges import draw_attitude_dial, draw_engine_cluster, draw_map_dial, draw_value_gauge, rocket_pixels
 from .hud_window import HudWindow
 from .separation import UPPER_STAGE_ENGINES  # the ship's engines, drawn dark until it is the stage that is flying
-from .layout import ARRANGEMENT_FADE, BoosterMemory, Layout, fade_progress, layout_for, stage_sep_time, staged
+from .layout import ARRANGEMENT_FADE, STAGE_SEP_TAIL, BoosterMemory, Layout, fade_progress, layout_for, stage_sep_time, staged
 from .mesh import ModelError, builtin_rocket, load_prepared
 from .starship_model import starship_stack
 from .render3d import PROGRESS_STEPS, ModelRenderer, body_to_world
@@ -348,7 +348,9 @@ class TelemetryBar(HudWindow):
         if tel.pitch_deg is None or tel.heading_deg is None:
             return None
         booster_only = self._flying_booster
-        separation = 0.0 if tel.separated_at is None or booster_only else (tel.t - tel.separated_at) / SEPARATION_ANIMATION_SECONDS
+        separation = 0.0 if tel.separated_at is None else (tel.t - tel.separated_at) / SEPARATION_ANIMATION_SECONDS
+        if booster_only:  # seen from the booster the ship rises away while it stays; afterwards the dial holds the booster alone
+            separation = 0.0 if separation >= 1.0 else max(separation, 1.0 / PROGRESS_STEPS)
         step = round(min(max(separation, 0.0), 1.0) * PROGRESS_STEPS)
         target = body_to_world(90.0 - tel.pitch_deg, tel.heading_deg, tel.roll_deg or 0.0)
         now = time.monotonic()
@@ -678,8 +680,8 @@ class TelemetryBar(HudWindow):
         self._flying_booster = not self._pad and tel.separated_at is not None and tel.t >= tel.separated_at and tel.on_booster
         if self._pad:
             arrangement = Layout.PAD  # the pad ignores Stage Sep
-        elif self._flying_booster:
-            arrangement = Layout.STAGE_1
+        elif self._flying_booster:  # the stage sep arrangement stays as long as it does with the ship flown, then the booster's own
+            arrangement = Layout.STAGE_SEP if tel.t < tel.separated_at + STAGE_SEP_TAIL else Layout.STAGE_1
         else:
             arrangement = layout_for(tel.t, sep_time, tel.separated_at, tel.booster_live)
         upper_live = False if self._pad or self._flying_booster else staged(tel.t, tel.separated_at)

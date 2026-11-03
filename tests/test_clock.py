@@ -130,3 +130,32 @@ def test_syncing_to_mission_time_sets_the_clock_and_lets_it_carry_on():
     assert clock.state is ClockState.RUNNING and clock.last_t == 455.0
     clock.hold_at_zero = False
     assert clock.advance(2010.0, False, 0.0) == pytest.approx(465.0)  # game time goes on from there
+
+
+def test_a_switch_of_vessel_in_flight_carries_the_clock_on_instead_of_restarting_it():
+    clock = CountdownClock(60.0)
+    assert clock.advance(1160.0, True, 160.0) == pytest.approx(160.0)  # flying the stack, mission time 160 s
+    assert clock.advance(1161.0, True, 161.0) == pytest.approx(161.0)
+    assert clock.advance(1162.0, True, 0.4) == pytest.approx(162.0)  # control passes to the booster, whose time starts again
+    assert clock.advance(1182.0, True, 20.4) == pytest.approx(182.0)  # and goes on counting with the game
+
+
+def test_switching_back_to_the_first_vessel_does_not_jump():
+    clock = CountdownClock(60.0)
+    clock.advance(1160.0, True, 160.0)
+    clock.advance(1170.0, True, 0.0)  # the booster
+    assert clock.advance(1180.0, True, 180.0) == pytest.approx(180.0)  # the ship again, its own mission time agrees
+
+
+def test_a_new_flight_after_a_vessel_on_the_pad_follows_its_own_mission_time():
+    clock = CountdownClock(60.0)
+    clock.advance(1160.0, True, 160.0)
+    clock.advance(5000.0, False, 0.0)  # a new rocket stands on the pad
+    assert clock.advance(5010.0, True, 10.0) == pytest.approx(10.0)  # not carried on from the old flight
+
+
+def test_reset_forgets_the_flight():
+    clock = CountdownClock(60.0)
+    clock.advance(1160.0, True, 160.0)
+    clock.reset()
+    assert clock.advance(1170.0, True, 5.0) == pytest.approx(5.0)

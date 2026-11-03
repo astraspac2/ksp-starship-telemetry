@@ -85,3 +85,19 @@ def test_it_is_remembered_after_a_mid_flight_start_until_reset():
     feed(detector, wall, [(540.0, 6, 0.1)])
     detector.reset()
     assert detector.separated_at is None
+
+
+def test_control_passing_to_another_vessel_in_the_climb_is_the_separation():
+    detector = SeparationDetector(Wall())
+    for t in (-5.0, 10.0, 100.0):
+        detector.update(t, 33, True, "Starship Super Heavy")
+    assert detector.separated_at is None
+    assert detector.update(143.0, 33, True, "Super Heavy Booster") == 143.0  # the booster keeps its 33 engines, the count does not change
+
+
+def test_a_vessel_switch_on_the_pad_is_not_a_separation():
+    detector = SeparationDetector(Wall())
+    detector.update(-30.0, 33, True, "Rocket A")
+    detector.update(-10.0, 33, True, "Rocket B")
+    assert detector.separated_at is None
+    assert detector.update(20.0, 33, True, "Rocket B") is None

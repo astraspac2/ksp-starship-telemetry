@@ -43,6 +43,7 @@ class Session:
         self.mock_game = MockGame(now=game_time)  # the mock source's stand-in for KSP's game clock
         self._reader: KrpcReader | None = None
         self.last: Telemetry | None = None  # what the display was last given, for the panel's readouts
+        self.last_vessel: str | None = None  # the name of the vessel the game reported being flown, to notice a switch
         self.markers: list[Milestone] = []
         self._events = {VIEW_FLIGHT: events_from_dicts(settings.events), VIEW_PAD: events_from_dicts(settings.pad_events)}
         self.source = DataSource.MOCK if settings.source == "MOCK" else DataSource.LIVE
@@ -207,9 +208,11 @@ class Session:
         else:
             status = self.reader_status()
             telemetry = live_telemetry(self.clock, status)
+            self.last_vessel = status.sample.vessel_name if status.sample is not None else None
             self.t = telemetry.t
             self._watch_game(status, telemetry)
-        separated = self.separation.update(telemetry.t, telemetry.engines_total, telemetry.status is None)
+        vessel = self.last_vessel if self.source is DataSource.LIVE else None
+        separated = self.separation.update(telemetry.t, telemetry.engines_total, telemetry.status is None, vessel)
         if self.trace is not None and self.source is DataSource.LIVE:
             self.trace.add(telemetry.t, telemetry.engines_total, telemetry.engines_on, separated, telemetry.status)
         telemetry = replace(telemetry, separated_at=None if self.pad_mode else separated)  # the pad has no stage separation

@@ -21,16 +21,25 @@ class SeparationDetector:
 
     def reset(self) -> None:
         self.separated_at: float | None = None
+        self._vessel: str | None = None  # the vessel flown during the climb
         self._baseline: int | None = None
         self._candidate: tuple[int, float, float] | None = None  # engine count, flight time first seen, wall time first seen
 
-    def update(self, t: float, engines_total: int, valid: bool) -> float | None:
+    def update(self, t: float, engines_total: int, valid: bool, vessel: str | None = None) -> float | None:
         """Feed one reading; returns the flight time of the separation once seen, else None.
 
-        `valid` is False while the feed is lost or stale, when the reading means nothing.
+        `valid` is False while the feed is lost or stale, when the reading means nothing. `vessel` is the name of the
+        vessel being flown: when control passes to another vessel during the climb (the booster, which still has its 33 engines,
+        so the count does not change) that is the separation too.
         """
         if self.separated_at is not None or not valid or engines_total <= 0:
             return self.separated_at
+        if vessel:
+            if self._vessel is None or t <= 0:
+                self._vessel = vessel  # on the pad the vessel may be reloaded or switched without it meaning anything
+            elif vessel != self._vessel:
+                self.separated_at = t
+                return self.separated_at
         if self._baseline is None and t > 0 and engines_total == UPPER_STAGE_ENGINES:
             self.separated_at = max(t - ALREADY_SEPARATED_SECONDS, 0.0)  # the first thing seen is the ship alone: it is already flying on its own
             return self.separated_at

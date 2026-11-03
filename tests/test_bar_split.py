@@ -272,3 +272,43 @@ def test_the_ship_size_is_drawn_bigger_when_asked(qapp):
         )
 
     assert rocket_pixels_in_dial(1.5) > rocket_pixels_in_dial(1.0) * 1.15
+
+
+def booster_view_bar(t):
+    bar = TelemetryBar()
+    lit = (True,) * 13 + (False,) * 20
+    tel = dataclasses.replace(
+        mock_telemetry(t), engines_on=13, engines_total=33, engine_lit=lit, separated_at=143.0, on_booster=True,
+        booster_live=False, pitch_deg=30.0, heading_deg=90.0, roll_deg=0.0,
+    )
+    bar.set_telemetry(tel)
+    bar.grab()
+    bar._changed_at -= 10.0
+    return bar
+
+
+def test_the_stage_sep_arrangement_stays_for_a_while_when_flying_the_booster(qapp):
+    early = booster_view_bar(143.0 + 5.0)
+    assert early._flying_booster and early._shown_arrangement is Layout.STAGE_SEP
+    late = booster_view_bar(143.0 + 40.0)
+    assert late._shown_arrangement is Layout.STAGE_1
+
+
+def test_the_dial_shows_the_ship_leaving_while_the_booster_stays(qapp):
+    from ground_station.render3d import PROGRESS_STEPS
+    import numpy as np
+    from ground_station.render3d import body_to_world
+
+    bar = TelemetryBar()
+    axes = body_to_world(10.0, 90.0, 0.0)
+    renderer = bar._renderer
+
+    def ink(image):
+        pixels = np.frombuffer(image.constBits(), dtype=np.uint8).reshape(image.height(), image.width(), 4)
+        return int((pixels[:, :, 3] > 0).sum())
+
+    start = renderer.render_matrix(axes, 1.0 / PROGRESS_STEPS, True)  # just begun: the whole stack
+    middle = renderer.render_matrix(axes, 0.5, True)
+    end = renderer.render_matrix(axes, 0.0, True)  # the booster alone
+    assert ink(start) > ink(middle) > 0  # the ship rises out of the picture
+    assert ink(middle) > ink(end) * 0.5 and ink(end) > 0

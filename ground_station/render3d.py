@@ -173,8 +173,17 @@ class ModelRenderer:
     def _stage_triangles(self, step: int, booster_only: bool = False) -> tuple[np.ndarray, np.ndarray]:
         """Triangle corners (model space) and which of them to draw, for a step of the separation animation.
 
-        With `booster_only` it is the booster alone, settled in the dial like the ship is after the separation."""
+        With `booster_only` it is the booster alone, settled in the dial like the ship is after the separation. Steps in
+        between show the separation as seen from the booster: it stays, and the ship rises away out of the dial."""
         corners = self._vertices[self._faces]  # (M, 3, 3)
+        if booster_only and 0 < step < PROGRESS_STEPS:
+            p = step / PROGRESS_STEPS
+            eased = p * p * (3.0 - 2.0 * p)
+            corners = corners.copy()
+            corners[~self._is_booster, :, 1] += BOOSTER_BACK * eased * eased  # the ship climbs away, speeding up
+            corners[:, :, 1] -= self._booster_centre * eased  # the view settles on the booster
+            corners *= 1.0 + (self._booster_zoom - 1.0) * eased
+            return corners, np.arange(len(self._faces))
         if booster_only:
             corners = corners.copy()
             corners[:, :, 1] -= self._booster_centre

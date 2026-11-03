@@ -74,6 +74,7 @@ class LiveSample:
     booster_altitude_m: float | None = None
     booster_live: bool = False
     has_booster_cluster: bool = False  # the vessel being flown carries the booster's engine cluster (the stack, or the booster itself)
+    vessel_name: str = ""  # the vessel being flown, to notice control passing to another one
     ship_lit: tuple[bool, ...] | None = None  # per nozzle of the engines outside the current stage (the ship's, lit while still attached in hot staging); None = none to show
     heat_glow: float = 0.0  # how strongly the ship's heat shield should glow on re-entry, 0..1 (heating.py)
     flap_folds_deg: tuple[float, ...] | None = None  # how far in each of the ship's four flaps is folded from deployed (see flaps.py); None = not known
@@ -530,7 +531,7 @@ class KrpcReader:
                 else:
                     streams.refresh_stage()
             sample = streams.read(now)
-            sample = replace(sample, has_booster_cluster=bool(streams.sep))
+            sample = replace(sample, has_booster_cluster=bool(streams.sep), vessel_name=streams.vessel_name)
             booster = self._booster.update(now, conn.space_center, bool(streams.sep), self.altitude_mode, conn)
             if booster.live:
                 sample = replace(sample, booster_speed_ms=booster.speed_ms, booster_altitude_m=booster.altitude_m, booster_live=True)

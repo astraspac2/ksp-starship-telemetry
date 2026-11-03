@@ -8,6 +8,7 @@ from enum import Enum
 from .krpc_source import LiveSample, ReaderStatus
 
 COUNTDOWN_HOLD = -0.5  # shown as T-00:00:01 while the countdown has run out but KSP has not launched
+SWITCH_TOLERANCE = 2.0  # a vessel whose mission time is this much behind the flight's is a different vessel (a switch), not the same one
 
 
 class ClockState(Enum):
@@ -44,6 +45,7 @@ class CountdownClock:
         self._state = ClockState.IDLE
         self._liftoff_ut: float | None = None  # UT at which the countdown reaches T-0; None until the next sample
         self._last_t = -countdown_seconds
+        self._flight_start_ut: float | None = None  # UT at T+0 of the flight in progress, so a switch of vessel does not restart the clock
 
     @property
     def state(self) -> ClockState:
@@ -80,6 +82,7 @@ class CountdownClock:
         """Put the clock at KSP's mission elapsed time right now and let it carry on from there, whatever state it was in."""
         self._state = ClockState.RUNNING
         self._liftoff_ut = ut - met
+        self._flight_start_ut = ut - met
         self._last_t = met
 
     def reset(self, countdown_seconds: float | None = None) -> None:
@@ -87,13 +90,23 @@ class CountdownClock:
             self._seconds = countdown_seconds
         self._state = ClockState.IDLE
         self._liftoff_ut = None
+        self._flight_start_ut = None
         self._last_t = -self._seconds
 
     def advance(self, ut: float | None, launched: bool, met: float, warping: bool = False) -> float:
         """Current time relative to liftoff given the newest game time, or the last value if none."""
         if launched:
+            if ut is not None:
+                carried = None if self._flight_start_ut is None else ut - self._flight_start_ut
+                if carried is not None and met < carried - SWITCH_TOLERANCE and carried >= 0:
+                    # The vessel flown now has a younger mission time than the flight (the game starts a new vessel's
+                    # time at zero, e.g. the booster after the separation): carry on from the flight's own time.
+                    self._last_t = carried
+                    return carried
+                self._flight_start_ut = ut - met
             self._last_t = met
             return met
+        self._flight_start_ut = None  # a vessel on the pad: the next launch is a new flight
         if self._state is not ClockState.RUNNING or ut is None:
             return self._last_t
         if warping and self.hold_in_warp:
