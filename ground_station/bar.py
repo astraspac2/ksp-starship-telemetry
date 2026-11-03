@@ -810,6 +810,9 @@ class TelemetryBar(HudWindow):
         elif kind == "ship_engines":
             if upper_live or arrangement is Layout.FLIGHT:
                 fuel, on, total, lit = tel.fuel_fraction or 0.0, tel.engines_on, tel.engines_total, tel.engine_lit
+            elif tel.ship_engine_lit is not None and not self._flying_booster:  # still attached: its lit engines are read, its tanks are not
+                lit = tel.ship_engine_lit
+                fuel, on, total = 0.0, sum(lit), len(lit)
             else:  # the ship's own readings are not available until it is the vessel being flown
                 fuel, on, total, lit = 0.0, 0, UPPER_STAGE_ENGINES, (False,) * UPPER_STAGE_ENGINES
             draw_engine_cluster(painter, centre, r - 2.5, fuel, on, total, theme, lit, grow, self._levels_for(kind, on, total, lit), ring, dots_alpha, ring_alpha, ring_reveal)

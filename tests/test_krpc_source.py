@@ -126,6 +126,38 @@ def test_sep_booster_static_fire_lights_all_33():
         reader.stop()
 
 
+def test_the_ships_lit_engines_are_read_while_it_is_still_attached_in_hot_staging():
+    reader = make_reader(lambda: FakeConn(sep_booster=True, ship_engines_lit=True))
+    reader.start()
+    try:
+        assert wait_for(lambda: reader.snapshot().sample is not None)
+        sample = reader.snapshot().sample
+        assert sample.engines_total == 33 and sample.engines_on == 33  # the booster's own dial is as before
+        assert sample.ship_lit == (True,) * 6
+    finally:
+        reader.stop()
+
+
+def test_the_ships_engines_read_dark_while_they_are_not_lit():
+    reader = make_reader(lambda: FakeConn(sep_booster=True, ship_engines_lit=False))
+    reader.start()
+    try:
+        assert wait_for(lambda: reader.snapshot().sample is not None)
+        assert reader.snapshot().sample.ship_lit == (False,) * 6
+    finally:
+        reader.stop()
+
+
+def test_no_ship_engines_are_reported_when_the_vessel_has_none_besides_the_booster():
+    reader = make_reader(lambda: FakeConn(sep_booster=True))
+    reader.start()
+    try:
+        assert wait_for(lambda: reader.snapshot().sample is not None)
+        assert reader.snapshot().sample.ship_lit is None
+    finally:
+        reader.stop()
+
+
 def test_stage_propellants_follow_the_engines():
     assert stage_propellants([["LqdMethane", "Oxidizer"], ["Oxidizer", "LqdMethane"]]) == ["LqdMethane", "Oxidizer"]
 
@@ -172,6 +204,7 @@ class FakeConn:
         fuel_burn_rate: float = 0.0,
         node_uts: tuple[float, ...] = (),
         orbit_km: tuple[float, float] = (-6000.0, 80.0),
+        ship_engines_lit: bool | None = None,
     ):
         self.reads = 0
         self.sep_fields: dict[str, str] = {}
@@ -224,25 +257,30 @@ class FakeConn:
                 return fields[name]
 
             switch = SimpleNamespace(name="ModuleSEPEngineSwitch", get_field=get_field)
+            # With a ship on top (`ship_engines_lit` not None) the booster drops first, at decouple stage 2, and the ship's six engines
+            # are a group of their own, as in hot staging, where they burn while still attached.
+            booster_drop = 0 if ship_engines_lit is None else 2
             if dead_first_module:
                 # With the outer engines switched off, the module kRPC reads reports nothing at all: no
                 # thrust, no rating, no propellants and not even "active".
-                cluster = engine(False, False, 2, 0, 8, [], rated=0.0, thrust=0.0, modules=[switch])
+                cluster = engine(False, False, 2, booster_drop, 8, [], rated=0.0, thrust=0.0, modules=[switch])
             else:
-                cluster = engine(True, True, 2, 0, 20, methalox, rated=11464202.0, thrust=11456537.0, modules=[switch])
+                cluster = engine(True, True, 2, booster_drop, 20, methalox, rated=11464202.0, thrust=11456537.0, modules=[switch])
             engines = [
                 cluster,
-                engine(False, True, 0, 0, 13, methalox, rated=1001.0),
+                engine(False, True, 0, booster_drop, 13, methalox, rated=1001.0),
                 engine(False, True, 1, 1, 1, []),  # launch tower
             ]
+            if ship_engines_lit is not None:
+                engines.append(engine(ship_engines_lit, True, 1, 0, 6, methalox))
         stage_tanks = {
             2: tanks({"LqdMethane": (300.0, 600.0), "Oxidizer": (150.0, 300.0), "LiquidFuel": (0.0, 0.0)}),
             0: tanks({"LqdMethane": (100.0, 100.0), "Oxidizer": (100.0, 100.0)}),
         }
         if sep_booster:
-            stage_tanks[0] = tanks({"LqdMethane": (348919.0, 348919.0), "Oxidizer": (116306.0, 116306.0)})
+            stage_tanks[booster_drop] = tanks({"LqdMethane": (348919.0, 348919.0), "Oxidizer": (116306.0, 116306.0)})
             if fuel_burn_rate:  # the booster's tanks are emptying, as in a burn
-                stage_tanks[0] = SimpleNamespace(
+                stage_tanks[booster_drop] = SimpleNamespace(
                     amount=lambda name: 348919.0 - fuel_burn_rate * (time.monotonic() - started)
                     if name == "LqdMethane"
                     else 116306.0,

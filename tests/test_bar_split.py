@@ -70,6 +70,36 @@ def test_the_names_fade_out_again_when_the_booster_is_gone(qapp):
     assert label_ink(bar, left) < shown / 1.5
 
 
+def stage_sep_bar(ship_engine_lit):
+    """The stack just before the separation (the stage sep arrangement), with the ship's engines read or not."""
+    from ground_station.layout import stage_sep_time
+
+    bar = TelemetryBar()
+    t = stage_sep_time(bar._milestones) - 1.0
+    bar.set_telemetry(dataclasses.replace(mock_telemetry(t), ship_engine_lit=ship_engine_lit))
+    bar.grab()
+    bar._changed_at -= 10.0
+    return bar
+
+
+def ship_dial_ink(bar):
+    image = bar.grab().toImage()
+    total = 0
+    for y in range(int(GAUGE_Y) - 40, int(GAUGE_Y) + 40):
+        for x in range(int(ALTITUDE_CENTER_X) - 40, int(ALTITUDE_CENTER_X) + 40):
+            c = image.pixelColor(x, y)
+            total += c.red() + c.green() + c.blue()
+    return total
+
+
+def test_the_ships_engines_light_on_its_dial_while_it_is_still_attached(qapp):
+    dark, lit = stage_sep_bar((False,) * 6), stage_sep_bar((True,) * 6)
+    assert lit._shown_arrangement is Layout.STAGE_SEP and lit._shown[ALTITUDE_CENTER_X] in ("ship_engines", "map")
+    if lit._shown[ALTITUDE_CENTER_X] == "ship_engines":
+        assert ship_dial_ink(lit) > ship_dial_ink(dark) * 1.02
+    assert stage_sep_bar(None)._shown[ALTITUDE_CENTER_X] == lit._shown[ALTITUDE_CENTER_X]  # not read: the dial is as before
+
+
 def booster_flying_bar():
     bar = TelemetryBar()
     lit = (True,) * 13 + (False,) * 20

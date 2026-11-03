@@ -22,7 +22,7 @@ from .attitude import attitude_from_rotation
 
 STALE_AFTER_SECONDS = 1.0
 RETRY_SECONDS = 2.0
-VESSEL_CHECK_SECONDS = 1.0
+VESSEL_CHECK_SECONDS = 0.25
 DEFAULT_PROPELLANTS = ("LiquidFuel", "Oxidizer")
 FUEL_FLOW_WINDOW = 0.5  # seconds of tank readings the fuel flow is measured over
 FUEL_FLOW_MIN_SPAN = 0.25  # and the least span that gives a trustworthy rate
@@ -74,6 +74,7 @@ class LiveSample:
     booster_altitude_m: float | None = None
     booster_live: bool = False
     has_booster_cluster: bool = False  # the vessel being flown carries the booster's engine cluster (the stack, or the booster itself)
+    ship_lit: tuple[bool, ...] | None = None  # per nozzle of the engines outside the current stage (the ship's, lit while still attached in hot staging); None = none to show
     heat_glow: float = 0.0  # how strongly the ship's heat shield should glow on re-entry, 0..1 (heating.py)
     flap_folds_deg: tuple[float, ...] | None = None  # how far in each of the ship's four flaps is folded from deployed (see flaps.py); None = not known
 
@@ -325,6 +326,22 @@ class _Streams:
         except Exception:
             return 0.0
 
+    def _other_lit(self, in_stage: list[int]) -> tuple[bool, ...] | None:
+        """Nozzles lit on the engines outside the current stage, while a SEP cluster is on the vessel.
+
+        The current stage is the burning group that drops first (the booster), so in hot staging the ship's engines, still
+        attached and already lit, would not be counted there. None when the vessel has no cluster or no other engines.
+        """
+        if not self.sep:
+            return None
+        counted = set(in_stage)
+        others = sorted((i for i in range(len(self.engine_stages)) if i not in counted), key=lambda i: self.engine_nozzles[i])
+        lit: list[bool] = []
+        for i in others:
+            burning = self.engine_active[i]() and self.engine_has_fuel[i]() and self.engine_thrust[i]() > 0
+            lit.extend([burning] * self.engine_nozzles[i])
+        return tuple(lit) or None
+
     def read(self, now: float) -> LiveSample:
         amount = sum(a() for a, _ in self.fuel)
         capacity = sum(m() for _, m in self.fuel)
@@ -377,6 +394,7 @@ class _Streams:
             max_thrust_n=rated if rated else None,
             throttle=self.throttle(),
             heat_glow=self._heat_glow(speed),
+            ship_lit=self._other_lit(in_stage),
             situation=str(getattr(self.situation(), "name", self.situation())),
             received_at=now,
         )
