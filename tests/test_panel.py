@@ -289,13 +289,13 @@ def test_accent_swatches_set_the_accent(panel):
 
 
 def test_panel_look_switches_to_forest_and_back(panel):
-    panel._panel_theme.setCurrentIndex(1)
+    panel._panel_theme.setCurrentIndex(settings_io.PANEL_THEMES.index("forest"))
     assert panel.session.settings.panel_theme == "forest"
     assert "rgba" in panel.styleSheet()
     pixmap = panel.grab()  # painting the forest must not fail
     assert not pixmap.isNull()
     panel._panel_theme.setCurrentIndex(0)
-    assert panel.session.settings.panel_theme == "aerospace"
+    assert panel.session.settings.panel_theme == "mission"  # the default look comes first
 
 
 # timeline events
@@ -415,10 +415,22 @@ def test_header_shows_the_bar_mode_and_dashes_before_any_flight_numbers(panel):
     assert panel._mode_label.text() == "PAD BAR"
 
 
-def test_the_panel_has_four_tabs_and_the_manual_notes_and_panel_look_moved_into_them(panel):
-    assert [panel._tabs.tabText(i) for i in range(panel._tabs.count())] == ["Mission && Timeline", "HUD", "Data && Test", "Looks"]
-    assert panel._tabs.widget(0).isAncestorOf(panel._marker_text)
-    assert panel._tabs.widget(3).isAncestorOf(panel._panel_theme)
+def test_the_panel_has_five_pages_with_a_side_menu_and_the_notes_and_panel_look_in_them(panel):
+    assert [panel._tabs.tabText(i) for i in range(panel._tabs.count())] == ["Launch", "Timeline", "HUD", "Data && Test", "Looks"]
+    assert [b.text() for b in panel._nav_buttons] == ["LAUNCH", "TIMELINE", "HUD", "DATA && TEST", "LOOKS"]
+    assert panel._tabs.widget(1).isAncestorOf(panel._marker_text)
+    assert panel._tabs.widget(4).isAncestorOf(panel._panel_theme)
+
+
+def test_the_side_menu_switches_the_page_and_follows_it(panel):
+    panel._nav_buttons[2].click()
+    assert panel._tabs.currentIndex() == 2 and panel._nav_buttons[2].isChecked()
+    panel._tabs.setCurrentIndex(4)
+    assert panel._nav_buttons[4].isChecked() and not panel._nav_buttons[2].isChecked()
+
+
+def test_the_custom_picture_look_is_still_there(panel):
+    assert "custom" in settings_io.PANEL_THEMES
 
 
 def _picture(tmp_path, colour):
@@ -467,7 +479,7 @@ def test_a_file_that_is_not_a_picture_is_refused_and_not_saved(panel, tmp_path, 
     bad = tmp_path / "not-a-picture.png"
     bad.write_text("hello")
     panel._set_panel_image(str(bad))
-    assert warned and panel.session.settings.panel_image == "" and panel.session.settings.panel_theme == "aerospace"
+    assert warned and panel.session.settings.panel_image == "" and panel.session.settings.panel_theme == "mission"
 
 
 def test_my_own_picture_look_with_no_picture_still_paints_a_plain_window(panel):

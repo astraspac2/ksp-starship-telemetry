@@ -15,7 +15,7 @@ from .units import ALTITUDE_UNITS, SPEED_UNITS, THRUST_UNITS
 REFRESH_HZ = (20, 30, 60)
 WARP_POLICIES = ("follow", "hold")  # countdown follows game time through time warp, or holds while warping
 THEMES = ("A - Starship-accurate", "B - Glass", "C - Mission control", "D - Forest")
-PANEL_THEMES = ("aerospace", "forest", "deepspace", "mars", "custom")
+PANEL_THEMES = ("mission", "aerospace", "forest", "deepspace", "mars", "custom")
 BACKGROUNDS = ("transparent", "solid")
 ALTITUDE_MODES = ("surface", "sea")  # above the ground/sea, or above sea level
 VIEW_MODES = ("flight", "pad")  # the bar for a flight, or for the pad and a static fire

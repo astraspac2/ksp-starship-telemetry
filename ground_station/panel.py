@@ -7,6 +7,7 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QAction, QColor, QFontDatabase, QIcon, QKeySequence, QLinearGradient, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QCheckBox,
     QColorDialog,
     QComboBox,
@@ -72,13 +73,13 @@ QMenuBar, QStatusBar { background: @bar_bg@; }
 QMenuBar::item:selected, QMenu::item:selected { background: @hover@; }
 QMenu { background: @panel@; border: 1px solid @border@; }
 QScrollArea { border: none; }
-QGroupBox { border: 1px solid @border@; border-radius: 8px; margin-top: 14px; padding: 14px 10px 10px 10px; background: @group_bg@; }
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; color: @accent@; font-weight: bold; }
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QListWidget, QTableWidget { background: @panel@; border: 1px solid @border@; border-radius: 3px; padding: 3px 5px; }
+QGroupBox { border: 1px solid @border@; border-radius: @r_box@; margin-top: 14px; padding: 14px 10px 10px 10px; background: @group_bg@; }
+QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; color: @group_title@; font-weight: @group_weight@; }
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QListWidget, QTableWidget { background: @panel@; border: 1px solid @border@; border-radius: @r_ctl@; padding: 4px 6px; }
 QComboBox QAbstractItemView { background: @panel@; selection-background-color: @hover@; }
 QTableWidget { gridline-color: @grid@; alternate-background-color: @panel_alt@; }
 QHeaderView::section { background: @panel@; color: @title@; border: none; border-bottom: 1px solid @border@; padding: 6px; }
-QPushButton, QToolButton { background: @button@; border: 1px solid @button_border@; border-radius: 4px; padding: 6px 16px; }
+QPushButton, QToolButton { background: @button@; border: 1px solid @button_border@; border-radius: @r_btn@; padding: 6px 16px; }
 QPushButton:hover, QToolButton:hover { background: @hover@; border-color: @accent@; }
 QPushButton#primary { background: @accent@; color: #04101a; border-color: @accent@; font-weight: bold; }
 QPushButton#primary:hover { background: @text@; }
@@ -92,8 +93,8 @@ QTabWidget::pane { border: none; border-top: 1px solid @border@; background: @pa
 QTabBar::tab { background: transparent; color: @title@; padding: 10px 24px; border: none; border-bottom: 3px solid transparent; font-size: 14px; }
 QTabBar::tab:hover { color: @text@; }
 QTabBar::tab:selected { color: @accent@; border-bottom: 3px solid @accent@; font-weight: bold; }
-QFrame#header { border: 1px solid @border@; border-radius: 10px; background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 @header_a@, stop:1 @header_b@); }
-QFrame#tile { border: 1px solid @border@; border-radius: 8px; background: @panel@; }
+QFrame#header { border: 1px solid @border@; border-radius: @r_head@; background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 @header_a@, stop:1 @header_b@); }
+QFrame#tile { border: 1px solid @border@; border-radius: @r_box@; background: @panel@; }
 QLabel#tileCaption { color: @title@; font-size: 11px; font-weight: bold; }
 QLabel#tileValue { font-size: 28px; font-weight: bold; }
 QLabel#hint { color: @title@; }
@@ -106,9 +107,22 @@ QCheckBox::indicator:checked { background: @accent@; border-color: @text@; }
 QScrollBar:vertical { background: transparent; width: 10px; }
 QScrollBar::handle:vertical { background: @border@; border-radius: 5px; min-height: 24px; }
 QScrollBar::add-line, QScrollBar::sub-line { height: 0; }
+QPushButton#nav { background: transparent; border: none; border-left: 3px solid transparent; border-radius: 0px; text-align: left; padding: 12px 16px; color: @title@; min-width: 140px; }
+QPushButton#nav:hover { color: @text@; background: @hover@; }
+QPushButton#nav:checked { color: @text@; border-left: 3px solid @accent@; background: @panel@; font-weight: bold; }
 """
 
+SHAPE_DEFAULTS = {  # the look's shape: how round the boxes, fields, buttons and the header are, and how its group titles read
+    "r_box": "8px", "r_ctl": "3px", "r_btn": "4px", "r_head": "10px", "group_title": "@accent@", "group_weight": "bold",
+}
 PALETTES = {
+    "mission": {  # black, white and grey with hairlines and square corners, like the launch webcast
+        "bg": "#000000", "bar_bg": "#000000", "text": "#ffffff", "border": "#2e2e2e", "panel": "#050505",
+        "panel_alt": "#0b0b0b", "title": "#9a9a9a", "button": "#000000", "button_border": "#6a6a6a", "hover": "#1c1c1c",
+        "accent": "#ffffff", "grid": "#1f1f1f", "disabled": "#4a4a4a", "group_bg": "#050505", "pane_bg": "transparent",
+        "header_a": "#050505", "header_b": "#050505",
+        "r_box": "0px", "r_ctl": "0px", "r_btn": "0px", "r_head": "0px", "group_title": "#9a9a9a", "group_weight": "normal",
+    },
     "aerospace": {
         "bg": "#121a23", "bar_bg": "#0e151d", "text": "#d8e0e8", "border": "#2a3b4e", "panel": "#0f1822",
         "panel_alt": "#111c28", "title": "#8fa3b5", "button": "#172433", "button_border": "#34506b", "hover": "#20344a",
@@ -142,6 +156,7 @@ PALETTES["custom"] = {  # over the operator's own picture: translucent dark pane
     "group_bg": "rgba(6,10,16,85)", "pane_bg": "rgba(6,10,16,35)", "header_a": "rgba(18,28,44,200)", "header_b": "rgba(6,10,18,195)",
 }
 PANEL_THEME_LABELS = {
+    "mission": "Mission control",
     "aerospace": "Aerospace dark",
     "forest": "Forest at dusk",
     "deepspace": "Deep space",
@@ -153,14 +168,17 @@ ACCENT_SWATCHES = [("Moss", "#8FD694"), ("Ice", "#5CB6FF"), ("Amber", "#FFB030")
 
 def build_style(panel_theme: str) -> str:
     sheet = STYLE_TEMPLATE
-    for key, value in PALETTES.get(panel_theme, PALETTES["aerospace"]).items():
+    values = {**SHAPE_DEFAULTS, **PALETTES.get(panel_theme, PALETTES["mission"])}
+    for key in ("r_box", "r_ctl", "r_btn", "r_head", "group_title", "group_weight"):  # these may name a colour, so they go first
+        sheet = sheet.replace(f"@{key}@", values[key])
+    for key, value in values.items():
         sheet = sheet.replace(f"@{key}@", value)
     return sheet
 
 
 PLAIN_BACKDROP = "#0b121a"  # behind the controls when the chosen look has no picture to paint
 GREEN, AMBER, RED, GREY = "#3ddc84", "#ffb030", "#ff5148", "#6b7a88"
-CHIP = "color: #0b121a; font-weight: bold; padding: 2px 10px; border-radius: 10px;"  # a small coloured label
+CHIP = "color: #0b121a; font-weight: bold; padding: 2px 10px;"  # a small coloured label
 WARP_LABELS = ["Follow game time through time warp (default)", "Hold the countdown during time warp"]
 ALTITUDE_MODE_LABELS = {
     "surface": "Surface altitude (above ground/sea, whichever is closer)",
@@ -185,7 +203,7 @@ EVENTS_TITLES = {
     "pad": "Pad / static-fire events - times are relative to T-0 (the ignition command), T+ after it",
 }
 TILE_NAMES = ("SPEED", "ALTITUDE", "FUEL", "ENGINES")  # the header's live readout tiles
-THUMB_WIDTH = 440  # two look cards side by side must fit the narrowest panel window
+THUMB_WIDTH = 340  # two look cards side by side must fit the narrowest panel window, beside the side menu
 
 
 def scrolling(page: QWidget) -> QScrollArea:
@@ -214,17 +232,22 @@ class ControlPanel(QMainWindow):
         self._forest_cache: QPixmap | None = None
         self.setWindowTitle(PANEL_TITLE)
         self.resize(1100, 760)
-        self.setMinimumSize(1000, 620)  # the look cards sit two across and need this much room
+        self.setMinimumSize(1000, 620)  # the look cards sit two across beside the side menu and need this much room
 
         central = QWidget()
         root = QVBoxLayout(central)
         root.addWidget(self._build_countdown_box())
-        self._tabs = QTabWidget()
-        self._tabs.addTab(scrolling(self._build_mission_tab()), "Mission && Timeline")
+        self._tabs = QTabWidget()  # the pages; the side menu below picks one, so its own tab bar stays hidden
+        self._tabs.addTab(scrolling(self._build_launch_tab()), "Launch")
+        self._tabs.addTab(scrolling(self._build_timeline_tab()), "Timeline")
         self._tabs.addTab(scrolling(self._build_hud_tab()), "HUD")
         self._tabs.addTab(scrolling(self._build_data_tab()), "Data && Test")
         self._tabs.addTab(scrolling(self._build_appearance_tab()), "Looks")  # the bar's look, then this window's
-        root.addWidget(self._tabs, 1)
+        self._tabs.tabBar().hide()
+        body = QHBoxLayout()
+        body.addWidget(self._build_side_menu())
+        body.addWidget(self._tabs, 1)
+        root.addLayout(body, 1)
         self.setCentralWidget(central)
         self._build_menu()
         self.statusBar().showMessage("Ready.")
@@ -284,18 +307,41 @@ class ControlPanel(QMainWindow):
         self._view_menu.addAction(self._map_action)
         self._view_menu.addAction(self._pad_action)
 
-    # header: the countdown and the live numbers
+    # side menu: one button per page
+    def _build_side_menu(self) -> QWidget:
+        menu = QWidget()
+        column = QVBoxLayout(menu)
+        column.setContentsMargins(0, 8, 0, 0)
+        column.setSpacing(0)
+        self._nav_group = QButtonGroup(self)
+        self._nav_group.setExclusive(True)
+        self._nav_buttons: list[QPushButton] = []
+        for index in range(self._tabs.count()):
+            button = QPushButton(self._tabs.tabText(index).upper())
+            button.setObjectName("nav")
+            button.setCheckable(True)
+            button.setCursor(Qt.PointingHandCursor)
+            button.clicked.connect(lambda _checked=False, i=index: self._tabs.setCurrentIndex(i))
+            self._nav_group.addButton(button)
+            self._nav_buttons.append(button)
+            column.addWidget(button)
+        self._nav_buttons[0].setChecked(True)
+        self._tabs.currentChanged.connect(lambda i: self._nav_buttons[i].setChecked(True))
+        column.addStretch(1)
+        return menu
+
+    # header: the countdown and what runs it
     def _build_countdown_box(self) -> QFrame:
         box = QFrame()
         box.setObjectName("header")
         layout = QHBoxLayout(box)
-        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setContentsMargins(22, 14, 22, 14)
         layout.setSpacing(18)
 
         left = QVBoxLayout()
         top = QHBoxLayout()
         self._clock_readout = QLabel("")
-        self._clock_readout.setStyleSheet("font-size: 46px; font-weight: bold;")
+        self._clock_readout.setStyleSheet("font-size: 54px; letter-spacing: 3px;")
         self._state_label = QLabel("")
         top.addWidget(self._clock_readout)
         top.addWidget(self._state_label, 0, Qt.AlignVCenter)
@@ -308,6 +354,10 @@ class ControlPanel(QMainWindow):
         chips.addWidget(self._mode_label)
         chips.addStretch(1)
         left.addLayout(chips)
+        left.addStretch(1)  # the chips keep their own height however tall the buttons beside them are
+        layout.addLayout(left, 3)
+
+        right = QVBoxLayout()
         row = QHBoxLayout()
         self._start_button = QPushButton("Start")
         self._start_button.setObjectName("primary")
@@ -316,11 +366,41 @@ class ControlPanel(QMainWindow):
         self._reset_button = QPushButton("Reset")
         for button in (self._start_button, self._hold_button, self._resume_button, self._reset_button):
             row.addWidget(button)
-        row.addStretch(1)
-        left.addLayout(row)
-        layout.addLayout(left, 3)
+        right.addLayout(row)
+        extras = QHBoxLayout()
+        self._lock = QCheckBox("BROADCAST LOCK")
+        self._lock.setStyleSheet("font-weight: bold;")
+        self._lock.setToolTip("Locks every setting and the Start, Resume and Reset buttons. Hold and Abort stay available.")
+        self._jump_button = QPushButton("Jump to mission time")
+        self._jump_button.setToolTip(
+            "Sets the bar's clock to the mission time KSP shows at the top left (it differs every flight). "
+            "Only reads from KSP; nothing is sent to it."
+        )
+        extras.addWidget(self._lock)
+        extras.addStretch(1)
+        extras.addWidget(self._jump_button)
+        right.addLayout(extras)
+        self._abort_button = QPushButton("ABORT")
+        self._abort_button.setObjectName("abort")
+        self._abort_button.setToolTip("Scrubs the countdown on the display. Nothing is sent to KSP.")
+        self._abort_button.setMinimumHeight(36)
+        right.addWidget(self._abort_button)
+        layout.addLayout(right, 2)
 
-        tiles = QGridLayout()  # live numbers, so the panel shows the flight as well as the controls
+        self._start_button.clicked.connect(self._session.start_countdown)
+        self._hold_button.clicked.connect(self._session.hold_countdown)
+        self._resume_button.clicked.connect(self._session.resume_countdown)
+        self._reset_button.clicked.connect(self._session.reset_countdown)
+        self._abort_button.clicked.connect(self._abort)
+        self._jump_button.clicked.connect(self._jump_to_mission_time)
+        self._lock.toggled.connect(lambda _locked: self.refresh())
+        return box
+
+    def _build_readout_tiles(self) -> QWidget:
+        """The live numbers, so the panel shows the flight as well as the controls."""
+        holder = QWidget()
+        tiles = QGridLayout(holder)
+        tiles.setContentsMargins(0, 0, 0, 0)
         tiles.setSpacing(10)
         self._tile_captions: dict[str, QLabel] = {}
         self._tile_values: dict[str, QLabel] = {}
@@ -336,39 +416,11 @@ class ControlPanel(QMainWindow):
             column.addWidget(caption)
             column.addWidget(value)
             self._tile_captions[name], self._tile_values[name] = caption, value
-            tiles.addWidget(tile, index // 2, index % 2)
-        layout.addLayout(tiles, 3)
-
-        right = QVBoxLayout()
-        self._lock = QCheckBox("BROADCAST LOCK")
-        self._lock.setStyleSheet("font-weight: bold;")
-        self._lock.setToolTip("Locks every setting and the Start, Resume and Reset buttons. Hold and Abort stay available.")
-        self._jump_button = QPushButton("Jump to mission time")
-        self._jump_button.setToolTip(
-            "Sets the bar's clock to the mission time KSP shows at the top left (it differs every flight). "
-            "Only reads from KSP; nothing is sent to it."
-        )
-        self._abort_button = QPushButton("ABORT")
-        self._abort_button.setObjectName("abort")
-        self._abort_button.setToolTip("Scrubs the countdown on the display. Nothing is sent to KSP.")
-        self._abort_button.setMinimumHeight(40)
-        right.addWidget(self._lock, 0, Qt.AlignRight)
-        right.addStretch(1)
-        right.addWidget(self._jump_button)
-        right.addWidget(self._abort_button)
-        layout.addLayout(right, 1)
-
-        self._start_button.clicked.connect(self._session.start_countdown)
-        self._hold_button.clicked.connect(self._session.hold_countdown)
-        self._resume_button.clicked.connect(self._session.resume_countdown)
-        self._reset_button.clicked.connect(self._session.reset_countdown)
-        self._abort_button.clicked.connect(self._abort)
-        self._jump_button.clicked.connect(self._jump_to_mission_time)
-        self._lock.toggled.connect(lambda _locked: self.refresh())
-        return box
+            tiles.addWidget(tile, 0, index)
+        return holder
 
     # tabs
-    def _build_mission_tab(self) -> QWidget:
+    def _build_launch_tab(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
         form = QFormLayout()
@@ -383,7 +435,22 @@ class ControlPanel(QMainWindow):
         form.addRow("Mission label (pill and bar; flight and pad each keep their own)", self._subtitle)
         form.addRow("Countdown starts at", self._start_text)
         form.addRow("Time warp", self._warp)
-        layout.addLayout(form)
+        mission = QGroupBox("Mission")
+        mission.setLayout(form)
+        layout.addWidget(mission)
+        readout = QGroupBox("Live readout")
+        readout_layout = QVBoxLayout(readout)
+        readout_layout.addWidget(self._build_readout_tiles())
+        readout_note = QLabel("Shown only while the game is connected.")
+        readout_note.setObjectName("hint")
+        readout_layout.addWidget(readout_note)
+        layout.addWidget(readout)
+        layout.addStretch(1)
+        return page
+
+    def _build_timeline_tab(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
 
         self._events_box = box = QGroupBox(EVENTS_TITLES["flight"])
         inner = QVBoxLayout(box)
@@ -417,7 +484,7 @@ class ControlPanel(QMainWindow):
         inner.addLayout(buttons)
         hint = QLabel("The timeline always lists enabled events in time order. Untick a row to hide it without deleting it.")
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #8fa3b5;")
+        hint.setObjectName("hint")
         inner.addWidget(hint)
 
         auto_box = QGroupBox("Automatic markers - added from what KSP reports (flight view only)")
@@ -448,13 +515,11 @@ class ControlPanel(QMainWindow):
             "comes down through 70 km. Untick a row to hide it, Delete to remove it."
         )
         auto_hint.setWordWrap(True)
-        auto_hint.setStyleSheet("color: #8fa3b5;")
+        auto_hint.setObjectName("hint")
         auto_inner.addWidget(auto_hint)
 
-        halves = QHBoxLayout()
-        halves.addWidget(box, 1)
-        halves.addWidget(auto_box, 1)
-        layout.addLayout(halves, 1)
+        layout.addWidget(box, 1)  # one under the other: with the side menu the page is too narrow for the two side by side
+        layout.addWidget(auto_box, 1)
         notes = QGroupBox("Manual notes - typed markers that show on the timeline as squares at the current time")
         QVBoxLayout(notes).addWidget(self._build_markers_tab())
         layout.addWidget(notes)
@@ -465,12 +530,12 @@ class ControlPanel(QMainWindow):
         layout = QVBoxLayout(page)
         layout.addWidget(self._build_preview_group("hud"))
 
-        form = QFormLayout()
+        display, look, show, model = QFormLayout(), QFormLayout(), QFormLayout(), QFormLayout()
         self._view_mode = QComboBox()
         self._view_mode.addItems([VIEW_LABELS[m] for m in VIEW_MODES])
         self._view_mode.setToolTip("Always your choice: the bar never switches to or from the pad view by itself.")
         self._view_mode.currentIndexChanged.connect(self._view_mode_changed)
-        form.addRow("Bar for", self._view_mode)
+        display.addRow("Bar for", self._view_mode)
 
         accent_row = QHBoxLayout()
         self._accent_button = QPushButton()
@@ -479,7 +544,7 @@ class ControlPanel(QMainWindow):
         accent_reset.clicked.connect(lambda: self._set_accent(""))
         accent_row.addWidget(self._accent_button, 1)
         accent_row.addWidget(accent_reset)
-        form.addRow("Accent colour", accent_row)
+        look.addRow("Accent colour", accent_row)
 
         opacity_row = QHBoxLayout()
         self._opacity = QSlider(Qt.Horizontal)
@@ -491,7 +556,7 @@ class ControlPanel(QMainWindow):
         opacity_row.addWidget(self._opacity, 1)
         opacity_row.addWidget(self._opacity_label)
         opacity_row.addWidget(opacity_reset)
-        form.addRow("Panel opacity", opacity_row)
+        look.addRow("Panel opacity", opacity_row)
         self._opacity.valueChanged.connect(self._opacity_moved)
 
         self._scale = QDoubleSpinBox()
@@ -499,7 +564,7 @@ class ControlPanel(QMainWindow):
         self._scale.setSingleStep(0.05)
         self._scale.setDecimals(2)
         self._scale.valueChanged.connect(self._store_hud)
-        form.addRow("HUD scale", self._scale)
+        display.addRow("HUD scale", self._scale)
         self._resolution = QComboBox()
         self._resolution.addItems([resolution_label(c) for c in RESOLUTION_CHOICES])
         self._resolution.setToolTip(
@@ -507,28 +572,28 @@ class ControlPanel(QMainWindow):
             "the screen it is on. HUD scale above still fine-tunes the size."
         )
         self._resolution.currentIndexChanged.connect(self._store_hud)
-        form.addRow("Screen resolution", self._resolution)
+        display.addRow("Screen resolution", self._resolution)
         self._ship_scale = QDoubleSpinBox()
         self._ship_scale.setRange(0.5, 2.0)
         self._ship_scale.setSingleStep(0.05)
         self._ship_scale.setDecimals(2)
         self._ship_scale.setToolTip("How big the rocket is in the 3D dial once the booster has separated and only the ship is left. 1.00 is the normal size.")
         self._ship_scale.valueChanged.connect(self._store_hud)
-        form.addRow("Ship size in the dial (after separation)", self._ship_scale)
+        display.addRow("Ship size in the dial (after separation)", self._ship_scale)
         self._flap_roll = QCheckBox("Ship flaps in the dial follow roll")
         self._flap_roll.setToolTip("Turn off to keep the dial's flaps still when you roll. Deploy, retract and pitch still show.")
         self._flap_roll.toggled.connect(self._store_hud)
-        form.addRow(self._flap_roll)
+        look.addRow(self._flap_roll)
         self._flap_yaw = QCheckBox("Ship flaps in the dial follow yaw")
         self._flap_yaw.setToolTip("Turn off to keep the dial's flaps still when you yaw. Deploy, retract and pitch still show.")
         self._flap_yaw.toggled.connect(self._store_hud)
-        form.addRow(self._flap_yaw)
+        look.addRow(self._flap_yaw)
 
         self._font = QComboBox()
         self._font.addItem(AUTOMATIC_FONT)
         self._font.addItems(sorted(set(QFontDatabase.families())))
         self._font.currentIndexChanged.connect(self._store_hud)
-        form.addRow("Font", self._font)
+        look.addRow("Font", self._font)
 
         background_row = QHBoxLayout()
         self._background = QComboBox()
@@ -539,7 +604,7 @@ class ControlPanel(QMainWindow):
         self._background_button.clicked.connect(self._pick_background_colour)
         background_row.addWidget(self._background, 1)
         background_row.addWidget(self._background_button)
-        form.addRow("Background", background_row)
+        look.addRow("Background", background_row)
 
         self._on_top = QCheckBox("Keep the HUD in front of all other windows (recommended)")
         self._click_through = QCheckBox("Click-through: mouse clicks pass through the HUD (untick to drag it)")
@@ -563,12 +628,12 @@ class ControlPanel(QMainWindow):
             self._glow_check,
         ):
             checkbox.toggled.connect(self._store_hud)
-            form.addRow(checkbox)
+            show.addRow(checkbox)
 
         self._nodes = QSpinBox()
         self._nodes.setRange(1, 20)
         self._nodes.valueChanged.connect(self._store_hud)
-        form.addRow("Timeline nodes", self._nodes)
+        show.addRow("Timeline nodes", self._nodes)
 
         self._speed_unit = QComboBox()
         self._speed_unit.addItems([SPEED_LABELS[u] for u in SPEED_UNITS])
@@ -580,10 +645,10 @@ class ControlPanel(QMainWindow):
         self._refresh_rate.addItems([f"{hz} Hz" for hz in REFRESH_HZ])
         for combo in (self._speed_unit, self._altitude_unit, self._thrust_unit, self._refresh_rate):
             combo.currentIndexChanged.connect(self._store_hud)
-        form.addRow("Speed unit", self._speed_unit)
-        form.addRow("Altitude unit", self._altitude_unit)
-        form.addRow("Thrust unit (pad view)", self._thrust_unit)
-        form.addRow("Refresh rate", self._refresh_rate)
+        display.addRow("Speed unit", self._speed_unit)
+        display.addRow("Altitude unit", self._altitude_unit)
+        display.addRow("Thrust unit (pad view)", self._thrust_unit)
+        display.addRow("Refresh rate", self._refresh_rate)
 
         vessel_row = QHBoxLayout()
         self._vessel_path = QLineEdit()
@@ -596,19 +661,25 @@ class ControlPanel(QMainWindow):
         vessel_row.addWidget(self._vessel_path, 1)
         vessel_row.addWidget(browse)
         vessel_row.addWidget(clear)
-        form.addRow("3D model", vessel_row)
+        model.addRow("3D model", vessel_row)
         self._starship_model = QCheckBox("Show the Starship on its booster (untick for the plain dummy rocket; your own model, if chosen, wins)")
         self._starship_model.toggled.connect(self._starship_model_changed)
-        form.addRow(self._starship_model)
+        model.addRow(self._starship_model)
         self._model_flip = QCheckBox("Flip the model nose to tail (tick it if the rocket shows upside down)")
         self._model_flip.toggled.connect(self._model_flip_changed)
-        form.addRow(self._model_flip)
+        model.addRow(self._model_flip)
         self._model_note = QLabel("")
         self._model_note.setWordWrap(True)
-        self._model_note.setStyleSheet("color: #8fa3b5;")
-        form.addRow(self._model_note)
+        self._model_note.setObjectName("hint")
+        model.addRow(self._model_note)
 
-        layout.addLayout(form)
+        cards = QGridLayout()
+        cards.setHorizontalSpacing(14)
+        for row, (title, card_form) in enumerate((("Display", display), ("Look", look), ("Show", show), ("3D model", model))):
+            card = QGroupBox(title)  # one card under the other: the long labels and checkboxes need the whole width
+            card.setLayout(card_form)
+            cards.addWidget(card, row, 0)
+        layout.addLayout(cards)
         toggle = QPushButton("Show / hide HUD window")
         toggle.clicked.connect(lambda: self._show_bar.setChecked(not self._show_bar.isChecked()))
         layout.addWidget(toggle)
@@ -737,7 +808,7 @@ class ControlPanel(QMainWindow):
         swatch_row = QHBoxLayout(swatches)
         for name, colour in ACCENT_SWATCHES:
             button = QPushButton(name)
-            button.setStyleSheet(f"border: 2px solid {colour}; border-radius: 4px; padding: 8px 16px;")
+            button.setStyleSheet(f"border: 2px solid {colour}; border-radius: 4px; padding: 8px 8px;")
             button.clicked.connect(lambda _checked, c=colour: self._set_accent(c))
             swatch_row.addWidget(button)
         reset = QPushButton("Default")
