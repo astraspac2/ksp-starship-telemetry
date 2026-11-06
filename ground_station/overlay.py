@@ -4,11 +4,12 @@ The window covers the screen, as big as the picture on stream, and is transparen
 off, only the parts that hold the pill and the bar take the mouse (a mask), so the rest of the screen stays usable.
 """
 
-from PySide6.QtCore import QEvent, QRect
-from PySide6.QtGui import QColor, QPainter, QRegion
+from PySide6.QtCore import QEvent, QRect, QTimer
+from PySide6.QtGui import QColor, QGuiApplication, QPainter, QRegion
 from PySide6.QtWidgets import QWidget
 
 from .hud_window import HudWindow
+from .keep_on_top import REASSERT_MS, reassert_topmost
 
 MASK_EVENTS = (QEvent.Move, QEvent.Resize, QEvent.Show, QEvent.Hide)
 
@@ -19,6 +20,17 @@ class OverlayWindow(HudWindow):
         self.setWindowTitle(title)
         self._parts: list[QWidget] = []
         self._background: QColor | None = None
+        self.reasserted = 0  # how many times the window was put back on top
+        self._keep_timer = QTimer(self)  # a game that takes the focus can push the overlay behind it: put it back now and then
+        self._keep_timer.setInterval(REASSERT_MS)
+        self._keep_timer.timeout.connect(self._keep_on_top)
+        self._keep_timer.start()
+
+    def _keep_on_top(self) -> None:
+        if not (self._on_top and self.isVisible()) or QGuiApplication.platformName() != "windows":
+            return
+        if reassert_topmost(int(self.winId())):
+            self.reasserted += 1
 
     def adopt(self, *widgets: HudWindow) -> None:
         for widget in widgets:

@@ -40,3 +40,34 @@ def test_the_pill_and_the_bar_share_one_overlay_window():
     assert not overlay.mask().contains(QPoint(bar.x() + 5, bar.y() + 5))
     overlay.set_window_options(on_top=True, click_through=True)
     assert overlay.mask().isEmpty()  # click-through: the whole window already ignores the mouse
+
+
+def test_the_overlay_is_put_back_on_top_while_keep_in_front_is_on(monkeypatch):
+    from ground_station import overlay as overlay_module
+
+    calls = []
+    monkeypatch.setattr(overlay_module.QGuiApplication, "platformName", staticmethod(lambda: "windows"))
+    monkeypatch.setattr(overlay_module, "reassert_topmost", lambda hwnd: calls.append(hwnd) or True)
+    window = overlay_module.OverlayWindow("test")
+    window.show()
+    window.set_window_options(True, True)
+    window._keep_on_top()
+    assert len(calls) == 1 and window.reasserted == 1  # on top, shown: it is put back
+    window.set_window_options(False, True)
+    window._keep_on_top()
+    assert len(calls) == 1  # "keep in front" off: left alone
+    window.set_window_options(True, True)
+    window.hide()
+    window._keep_on_top()
+    assert len(calls) == 1  # not shown: nothing to put back
+    assert window._keep_timer.isActive()
+
+
+def test_putting_a_window_back_on_top_does_nothing_off_windows():
+    from ground_station.keep_on_top import reassert_topmost
+
+    import sys
+
+    if sys.platform != "win32":
+        assert reassert_topmost(1234) is False
+    assert reassert_topmost(0) is False
