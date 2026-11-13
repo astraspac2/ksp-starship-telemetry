@@ -169,6 +169,8 @@ class TelemetryBar(HudWindow):
         self._attitude_drawn: tuple[np.ndarray, int, bool, object] | None = None  # orientation, separation step, booster only, picture
         self._ship_scale = 1.0  # the rocket's size in the dial once only the ship is left
         self._flying_booster = False  # the vessel flown is the booster after the separation: its own dial, live
+        self._mark_replay = False  # name the booster's gauges as a replay when their numbers come from a recording
+        self._replay_marked = False
         self._dot_levels: dict[str, list[float]] = {}  # how bright each engine dot is now, 0 (dim) to 1 (lit)
         self._dot_time: dict[str, float] = {}
         self._map = MapRenderer(MAP_PICTURE_PX)
@@ -310,6 +312,10 @@ class TelemetryBar(HudWindow):
         self.model_triangles = mesh.triangle_count
         self.update()
         return error
+
+    def set_mark_replay(self, marked: bool) -> None:
+        self._mark_replay = marked
+        self.update()
 
     def _rocket_scale(self, tel: Telemetry) -> float:
         """The ship-size setting, eased in over the separation animation, so it only applies once the booster has gone."""
@@ -713,6 +719,7 @@ class TelemetryBar(HudWindow):
                 painter.setOpacity(base if kind in STAGED_ELEMENTS and kind not in ("booster", "ship_engines") else base * arriving)
                 self._draw_element(painter, tel, kind, x, arrangement, upper_live, booster, arriving, ring_fill)
             painter.setOpacity(base)
+        self._replay_marked = self._mark_replay and tel.booster_replay
         self._draw_side_labels(painter, arrangement, progress, base)
 
     def _draw_side_labels(self, painter: QPainter, arrangement: Layout, progress: float, base: float) -> None:
@@ -729,7 +736,7 @@ class TelemetryBar(HudWindow):
         painter.setOpacity(base * alpha)
         painter.setFont(self._theme.make_font(13, QFont.Bold, 1.0))
         painter.setPen(self._theme.text)
-        for centre, text in (((ENGINE_CENTER_X + DIAL_CENTER_X) / 2, "SUPER HEAVY"), ((SPEED_CENTER_X + ALTITUDE_CENTER_X) / 2, "STARSHIP")):
+        for centre, text in (((ENGINE_CENTER_X + DIAL_CENTER_X) / 2, "SUPER HEAVY REPLAY" if self._replay_marked else "SUPER HEAVY"), ((SPEED_CENTER_X + ALTITUDE_CENTER_X) / 2, "STARSHIP")):
             painter.drawText(QRectF(centre - 100, SIDE_LABEL_Y - 10, 200, 20), Qt.AlignCenter, text)
         painter.setOpacity(base)
 

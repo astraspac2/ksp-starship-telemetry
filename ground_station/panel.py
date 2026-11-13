@@ -445,6 +445,23 @@ class ControlPanel(QMainWindow):
         readout_note.setObjectName("hint")
         readout_layout.addWidget(readout_note)
         layout.addWidget(readout)
+        recording = QGroupBox("Booster recording")
+        recording_layout = QVBoxLayout(recording)
+        self._record_button = QPushButton("Record the booster's flight")
+        self._record_button.setCheckable(True)
+        self._record_button.setToolTip("While you fly the booster after the separation, its numbers are written down against the time since the separation.")
+        self._record_button.toggled.connect(self._record_toggled)
+        self._use_recording = QCheckBox("Fill in the booster from the last recording while it cannot be read")
+        self._use_recording.setToolTip("When the ship is the vessel flown and the booster is out of range, the booster's gauges play the last recording.")
+        self._mark_replay = QCheckBox("Mark those gauges as a replay on the overlay (off: they look like live ones)")
+        for checkbox in (self._use_recording, self._mark_replay):
+            checkbox.toggled.connect(self._store_hud)
+        self._recording_note = QLabel("")
+        self._recording_note.setObjectName("hint")
+        self._recording_note.setWordWrap(True)
+        for widget in (self._record_button, self._use_recording, self._mark_replay, self._recording_note):
+            recording_layout.addWidget(widget)
+        layout.addWidget(recording)
         layout.addStretch(1)
         return page
 
@@ -939,6 +956,8 @@ class ControlPanel(QMainWindow):
         self._map_check.setChecked(s.show_map)
         self._panels_check.setChecked(s.show_panels)
         self._glow_check.setChecked(s.reentry_glow)
+        self._use_recording.setChecked(s.use_recording)
+        self._mark_replay.setChecked(s.mark_replay)
         self._show_pill.setChecked(s.show_pill)
         self._show_bar.setChecked(s.show_bar)
         self._timeline_check.setChecked(s.show_timeline)
@@ -1044,6 +1063,26 @@ class ControlPanel(QMainWindow):
         self._session.set_warp_policy(WARP_POLICIES[self._warp.currentIndex()])
         self._save()
 
+    def _record_toggled(self, on: bool) -> None:
+        if on:
+            self._session.start_recording()
+            self._record_button.setText("Stop recording")
+        else:
+            self._session.stop_recording()
+            self._record_button.setText("Record the booster's flight")
+        self._refresh_recording_note()
+
+    def _refresh_recording_note(self) -> None:
+        session = self._session
+        if session.replay_in_use:
+            self._recording_note.setText("REPLAY IN USE: the booster's gauges on the overlay are playing the last recording, not live data.")
+        elif session.recording_note:
+            self._recording_note.setText(session.recording_note)
+        elif session.replay is not None:
+            self._recording_note.setText(f"A recording of {session.replay.length:.0f} s is saved.")
+        else:
+            self._recording_note.setText("No recording yet.")
+
     def _store_hud(self, *_args) -> None:
         """Read every HUD control into the settings, save, and tell the display windows."""
         if self._syncing:
@@ -1071,6 +1110,8 @@ class ControlPanel(QMainWindow):
         s.show_map = self._map_check.isChecked()
         s.show_panels = self._panels_check.isChecked()
         s.reentry_glow = self._glow_check.isChecked()
+        s.use_recording = self._use_recording.isChecked()
+        s.mark_replay = self._mark_replay.isChecked()
         s.show_pill = self._show_pill.isChecked()
         s.show_bar = self._show_bar.isChecked()
         s.show_timeline = self._timeline_check.isChecked()
@@ -1374,6 +1415,7 @@ class ControlPanel(QMainWindow):
         state = session.clock.state
 
         self._clock_readout.setText(format_clock_text(session.t))
+        self._refresh_recording_note()
         name = STATE_NAMES[state]
         if state is ClockState.RUNNING and session.t >= 0:
             name = "LIFTOFF"

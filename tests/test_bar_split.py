@@ -312,3 +312,17 @@ def test_the_dial_shows_the_ship_leaving_while_the_booster_stays(qapp):
     end = renderer.render_matrix(axes, 0.0, True)  # the booster alone
     assert ink(start) > ink(middle) > 0  # the ship rises out of the picture
     assert ink(middle) > ink(end) * 0.5 and ink(end) > 0
+
+
+def test_replayed_booster_gauges_are_only_marked_on_the_overlay_when_asked(qapp):
+    def bar_with(mark):
+        bar = TelemetryBar()
+        bar.set_mark_replay(mark)
+        tel = dataclasses.replace(
+            mock_telemetry(300.0, 143.0), separated_at=143.0, booster_live=True, booster_speed_kmh=1500.0, booster_altitude_km=80.0, booster_replay=True
+        )
+        bar.set_telemetry(tel)
+        bar.grab()
+        return bar
+
+    assert bar_with(True)._replay_marked and not bar_with(False)._replay_marked

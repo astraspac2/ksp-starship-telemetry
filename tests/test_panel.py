@@ -544,3 +544,14 @@ def test_the_status_line_notes_a_kRPC_server_that_is_not_the_tested_version(pane
     assert "built for kRPC 0.6.0" in panel._connection_summary()[1]
     FakeReader.instances[0].snapshot = lambda: ReaderStatus(ConnState.CONNECTED, sample, 0.0, None, "0.6.0")
     assert "built for kRPC" not in panel._connection_summary()[1]
+
+
+def test_the_record_button_starts_and_stops_a_recording_and_the_settings_are_kept(panel):
+    assert not panel._use_recording.isChecked() and not panel._mark_replay.isChecked()  # off unless asked for
+    panel._record_button.setChecked(True)
+    assert panel.session.recorder is not None and panel._record_button.text() == "Stop recording"
+    panel._record_button.setChecked(False)
+    assert panel.session.recorder is None and "Nothing was recorded" in panel._recording_note.text()
+    panel._use_recording.setChecked(True)
+    panel._mark_replay.setChecked(True)
+    assert panel.session.settings.use_recording and panel.session.settings.mark_replay

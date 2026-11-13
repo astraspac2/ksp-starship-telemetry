@@ -32,6 +32,7 @@ class Telemetry:
     on_booster: bool = False  # the vessel being flown carries the booster's engines: with the separation seen, that is the booster itself
     heat_glow: float = 0.0  # how strongly the ship's heat shield glows on re-entry, 0..1
     flap_folds_deg: tuple[float, ...] | None = None  # how far in each of the ship's four flaps is folded from deployed; None = not known, drawn as built
+    booster_replay: bool = False  # the booster's numbers come from a recording, not from the game
     ship_engine_lit: tuple[bool, ...] | None = None  # the ship's engines read while it is still attached (hot staging); None = not read, the ship's dial stays dark
 
 

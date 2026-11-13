@@ -58,6 +58,8 @@ class Settings:
     resolution: str = "auto"  # the monitor's resolution the HUD is scaled to (resolution.py): "auto" takes the screen it is on
     show_panels: bool = True  # the side panels (gauges, engine cluster and dial) of the flight bar; off, they sink away
     reentry_glow: bool = True  # the ship's heat shield glows in the 3D dial while it comes down through the air
+    use_recording: bool = False  # fill in the booster from the last recording while it cannot be read (the panel says so)
+    mark_replay: bool = False  # and mark those gauges on the overlay too (off: the overlay shows them like live ones)
     flap_roll: bool = True  # the ship's flaps in the 3D dial follow the roll input
     flap_yaw: bool = True  # and the yaw input (deploy, retract and pitch always show)
     ship_scale: float = 1.0  # the 3D dial's rocket size once only the ship is left, as a multiple of its normal size
@@ -133,7 +135,7 @@ class Settings:
         within("panel_image_dim", 0, 90)
         for name in ("address", "subtitle", "pad_subtitle", "font", "vessel_model", "accent", "background_color", "panel_image"):
             text(name)
-        for name in ("auto_connect", "show_pill", "show_bar", "on_top", "click_through", "show_badge", "show_map", "show_timeline", "vessel_model_flip", "starship_model", "flap_roll", "flap_yaw", "show_panels", "reentry_glow"):
+        for name in ("auto_connect", "show_pill", "show_bar", "on_top", "click_through", "show_badge", "show_map", "show_timeline", "vessel_model_flip", "starship_model", "flap_roll", "flap_yaw", "show_panels", "reentry_glow", "use_recording", "mark_replay"):
             flag(name)
         if not fixed.address.strip():
             fixed.address = defaults.address

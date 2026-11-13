@@ -14,6 +14,7 @@ from .events import Event, events_from_dicts, events_to_dicts
 from .krpc_source import ConnState, KrpcReader, ReaderStatus
 from .live import live_telemetry
 from .mock_game import MockGame
+from .recording import FlightRecorder, Recording, load_latest, save_recording
 from .settings import Settings
 from .source import DataSource
 from .staging_trace import StagingTrace
@@ -35,8 +36,14 @@ class Session:
         game_time: Callable[[], float] = time.monotonic,
         trace: StagingTrace | None = None,
         booster_log: Path | None = None,
+        recordings: Path | None = None,
     ):
         self.settings = settings
+        self._recordings = recordings  # where flight recordings are kept; None keeps them in memory only
+        self.recorder: FlightRecorder | None = None  # set while the operator is recording
+        self.replay: Recording | None = load_latest(recordings)  # the last recording, to fill in the booster from
+        self.replay_in_use = False  # the booster's numbers on the display right now come from the recording
+        self.recording_note = ""
         self._booster_log = booster_log  # where the reader writes a record when the booster is lost
         self.trace = trace  # a record of what the game reported around a staging, when wanted
         self._reader_factory = reader_factory
@@ -216,10 +223,54 @@ class Session:
         if self.trace is not None and self.source is DataSource.LIVE:
             self.trace.add(telemetry.t, telemetry.engines_total, telemetry.engines_on, separated, telemetry.status)
         telemetry = replace(telemetry, separated_at=None if self.pad_mode else separated)  # the pad has no stage separation
+        telemetry = self._record_and_replay(telemetry)
         if self.clock.state is ClockState.ABORTED:
             telemetry = replace(telemetry, status=ABORT_STATUS)
         self.last = telemetry
         return telemetry
+
+    # recording a flight, and playing it back
+    def start_recording(self) -> None:
+        self.recorder = FlightRecorder("booster")
+        self.recording_note = "Recording: waiting for you to fly the booster after the separation"
+
+    def stop_recording(self) -> Recording | None:
+        """Stop recording and keep what was recorded as the latest recording (the one played back from now on)."""
+        recorder, self.recorder = self.recorder, None
+        recording = recorder.finish() if recorder is not None else None
+        if recording is None:
+            self.recording_note = "Nothing was recorded: the booster has to be the vessel flown after the separation"
+            return None
+        if self._recordings is not None:
+            try:
+                save_recording(recording, self._recordings)
+            except OSError as exc:
+                self.recording_note = f"The recording could not be saved: {exc}"
+                self.replay = recording
+                return recording
+        self.replay = recording
+        self.recording_note = f"Saved a recording of {recording.length:.0f} s"
+        return recording
+
+    def _record_and_replay(self, telemetry: Telemetry) -> Telemetry:
+        """Write down the booster's numbers while it is flown, and fill them in from the last recording while it cannot be read."""
+        self.replay_in_use = False
+        sep = telemetry.separated_at
+        if self.pad_mode or sep is None or telemetry.t < sep or telemetry.status is not None:
+            return telemetry
+        seconds = telemetry.t - sep
+        if telemetry.on_booster:
+            if self.recorder is not None and telemetry.speed_kmh is not None and telemetry.altitude_km is not None:
+                self.recorder.add(seconds, telemetry.speed_kmh, telemetry.altitude_km, telemetry.fuel_fraction or 0.0, telemetry.engines_on, telemetry.engines_total)
+                self.recording_note = f"Recording the booster: {seconds:.0f} s since the separation"
+            return telemetry
+        if not self.settings.use_recording or self.replay is None or telemetry.booster_live:
+            return telemetry
+        reading = self.replay.at(seconds)
+        if reading is None:
+            return telemetry
+        self.replay_in_use = True
+        return replace(telemetry, booster_speed_kmh=reading.speed_kmh, booster_altitude_km=reading.altitude_km, booster_live=True, booster_replay=True)
 
     # markers the station adds by itself
     def _watch_game(self, status: ReaderStatus, telemetry: Telemetry) -> None:
@@ -321,4 +372,6 @@ class Session:
         return sorted(planned + automatic + self.markers, key=lambda m: m.time)
 
     def shutdown(self) -> None:
+        if self.recorder is not None:
+            self.stop_recording()  # a flight being recorded is kept when the app closes
         self.disconnect()

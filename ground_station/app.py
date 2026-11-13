@@ -54,6 +54,7 @@ class GroundStationApp:
             settings_io.load(),
             trace=StagingTrace(folder.with_name("staging-trace.csv")),
             booster_log=folder.with_name("booster-loss.csv"),
+            recordings=folder.with_name("recordings"),
         )
         self.pill = PillWidget(subtitle=self.session.settings.mission_label)
         self.bar = TelemetryBar(subtitle=self.session.settings.mission_label, milestones=self.session.milestones())
@@ -116,6 +117,7 @@ class GroundStationApp:
         self.bar.set_show_map(s.show_map)
         self.bar.set_show_panels(s.show_panels)
         self.bar.set_reentry_glow(s.reentry_glow)
+        self.bar.set_mark_replay(s.mark_replay)
         self.bar.set_timeline(s.show_timeline, s.timeline_nodes)
         problem = self.bar.set_vessel_model(s.vessel_model, s.vessel_model_flip, s.starship_model)
         if problem:
