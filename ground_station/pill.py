@@ -14,8 +14,8 @@ SLANT = 40
 MARGIN = 12
 CLOCK_WEIGHT = QFont.Weight(540)  # Oxanium is a variable font; the overlay's digits sit between Regular and Medium
 WINDOW_HEIGHT = PILL_HEIGHT + 76
-PILL_ALPHA_LEFT = 175  # the plate is see-through like the overlay's: more solid at the left, fading toward the slanted tip
-PILL_ALPHA_RIGHT = 90
+PILL_ALPHA_LEFT = 200  # the plate is see-through like the overlay's: more solid at the left, fading toward the slanted tip
+PILL_ALPHA_RIGHT = 125
 
 
 def _pick_font(candidates: list[str]) -> str:
