@@ -1,7 +1,7 @@
 """The compact countdown "pill" shown before T-30s."""
 
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPainterPath
+from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QLinearGradient, QPainter, QPainterPath
 
 from .branding import DEFAULT_FLIGHT_LABEL
 from .countdown import format_clock, pill_state
@@ -14,6 +14,8 @@ SLANT = 40
 MARGIN = 12
 CLOCK_WEIGHT = QFont.Weight(540)  # Oxanium is a variable font; the overlay's digits sit between Regular and Medium
 WINDOW_HEIGHT = PILL_HEIGHT + 76
+PILL_ALPHA_LEFT = 175  # the plate is see-through like the overlay's: more solid at the left, fading toward the slanted tip
+PILL_ALPHA_RIGHT = 90
 
 
 def _pick_font(candidates: list[str]) -> str:
@@ -87,7 +89,10 @@ class PillWidget(HudWindow):
         clock_family = self._font_override or self._family
         label_family = self._font_override or self._label_family
 
-        painter.fillPath(self._pill_path(x, y), QColor(8, 16, 24, 215))
+        plate = QLinearGradient(QPointF(x, y), QPointF(x + PILL_WIDTH, y))
+        plate.setColorAt(0.0, QColor(8, 16, 24, PILL_ALPHA_LEFT))
+        plate.setColorAt(1.0, QColor(8, 16, 24, PILL_ALPHA_RIGHT))
+        painter.fillPath(self._pill_path(x, y), plate)
 
         sign, clock = format_clock(self._t)
         sign_font = QFont(clock_family)
