@@ -451,8 +451,8 @@ class ControlPanel(QMainWindow):
         self._record_button.setCheckable(True)
         self._record_button.setToolTip("While you fly the booster after the separation, its numbers are written down against the time since the separation.")
         self._record_button.toggled.connect(self._record_toggled)
-        self._use_recording = QCheckBox("Fill in the booster from the last recording while it cannot be read")
-        self._use_recording.setToolTip("When the ship is the vessel flown and the booster is out of range, the booster's gauges play the last recording.")
+        self._use_recording = QCheckBox("Use the last recording for the booster from the separation on (instead of the game's own numbers)")
+        self._use_recording.setToolTip("From the moment of the separation the booster's gauges play the last recording and ignore what the game reports for it. Untick to use the game's own numbers again.")
         self._mark_replay = QCheckBox("Mark those gauges as a replay on the overlay (off: they look like live ones)")
         for checkbox in (self._use_recording, self._mark_replay):
             checkbox.toggled.connect(self._store_hud)

@@ -264,10 +264,9 @@ class Session:
                 self.recorder.add(seconds, telemetry.speed_kmh, telemetry.altitude_km, telemetry.fuel_fraction or 0.0, telemetry.engines_on, telemetry.engines_total)
                 self.recording_note = f"Recording the booster: {seconds:.0f} s since the separation"
             return telemetry
-        # The game's own numbers win while they are really there. The booster being listed with no numbers (just after the separation, or
-        # out of range) is not "readable": that is where the recording takes over, so the gauges never show NO DATA.
-        readable = telemetry.booster_live and telemetry.booster_speed_kmh is not None and telemetry.booster_altitude_km is not None
-        if not self.settings.use_recording or self.replay is None or readable:
+        # With the recording switched on it is the booster's only source from the separation on, whatever the game still reports
+        # (so no NO DATA, and no mix of the two); with it off, the game's own numbers are all there is.
+        if not self.settings.use_recording or self.replay is None:
             return telemetry
         reading = self.replay.at(seconds)
         if reading is None:
