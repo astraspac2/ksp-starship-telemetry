@@ -95,7 +95,8 @@ def test_the_booster_is_filled_in_from_the_recording_only_when_asked_and_when_it
     session.replay = recorded()
     out = flying(session, 160.0, 150.0, on_booster=False)  # the ship is flown, 10 s after the separation
     assert out.booster_replay and out.booster_live and out.booster_speed_kmh == pytest.approx(900.0) and session.replay_in_use
-    assert not flying(session, 160.0, 150.0, on_booster=False, booster_live=True).booster_replay  # really readable: the game wins
+    readable = dataclasses.replace(mock_telemetry(160.0), booster_live=True, booster_speed_kmh=900.0, booster_altitude_km=70.0, separated_at=150.0)
+    assert not session._record_and_replay(readable).booster_replay  # really readable, with numbers: the game wins
     assert not flying(session, 150.0 + 200.0, 150.0, on_booster=False).booster_replay  # the recording has ended
     off = make_session(tmp_path, False)
     off.replay = recorded()
@@ -108,3 +109,20 @@ def test_no_playback_before_the_separation_or_while_the_feed_is_bad(tmp_path):
     assert not session._record_and_replay(dataclasses.replace(mock_telemetry(100.0), separated_at=None)).booster_replay
     bad = dataclasses.replace(mock_telemetry(160.0), separated_at=150.0, status="SIGNAL LOST")
     assert not session._record_and_replay(bad).booster_replay
+
+
+def test_the_recording_takes_over_right_after_the_separation_while_the_game_lists_the_booster_with_no_numbers(tmp_path):
+    session = make_session(tmp_path, True)
+    session.replay = recorded()
+    # the booster is listed (live) but its numbers are not readable yet: that would show NO DATA
+    base = dataclasses.replace(mock_telemetry(151.0), on_booster=False, booster_live=True, booster_speed_kmh=None, booster_altitude_km=None)
+    out = session._record_and_replay(dataclasses.replace(base, separated_at=150.0))
+    assert out.booster_replay and out.booster_speed_kmh is not None and out.booster_altitude_km is not None
+
+
+def test_real_numbers_win_over_the_recording_while_they_are_there(tmp_path):
+    session = make_session(tmp_path, True)
+    session.replay = recorded()
+    base = dataclasses.replace(mock_telemetry(151.0), on_booster=False, booster_live=True, booster_speed_kmh=1234.0, booster_altitude_km=70.0)
+    out = session._record_and_replay(dataclasses.replace(base, separated_at=150.0))
+    assert not out.booster_replay and out.booster_speed_kmh == 1234.0

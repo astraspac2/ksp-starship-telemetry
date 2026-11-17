@@ -326,3 +326,22 @@ def test_replayed_booster_gauges_are_only_marked_on_the_overlay_when_asked(qapp)
         return bar
 
     assert bar_with(True)._replay_marked and not bar_with(False)._replay_marked
+
+
+def test_the_split_view_stays_for_the_whole_replay_and_ends_with_it(qapp):
+    def bar_at(t, replay_live):
+        bar = TelemetryBar()
+        tel = dataclasses.replace(
+            mock_telemetry(t, 143.0), separated_at=143.0, booster_live=replay_live, booster_replay=replay_live,
+            booster_speed_kmh=1500.0 if replay_live else None, booster_altitude_km=80.0 if replay_live else None,
+        )
+        bar.set_telemetry(tel)
+        bar.grab()
+        bar._changed_at -= 10.0
+        return bar
+
+    for t in (143.0 + 5.0, 143.0 + 20.0, 143.0 + 120.0):  # the stage sep view first, then the split view, however long the replay lasts
+        assert bar_at(t, True)._shown_arrangement in (Layout.STAGE_SEP, Layout.SPLIT)
+    assert bar_at(143.0 + 20.0, True)._shown_arrangement is Layout.SPLIT
+    assert bar_at(143.0 + 120.0, True)._shown_arrangement is Layout.SPLIT
+    assert bar_at(143.0 + 120.0, False)._shown_arrangement is Layout.FLIGHT  # the replay is done: back to the flight view
