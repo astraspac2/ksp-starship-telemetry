@@ -31,6 +31,12 @@ python run_ground_station.py
 - **One overlay window:** the pill and the bar are parts of a single window, so capture software sees only one.
 - **Static-fire bar:** a small bar for the pad with engines, clock, thrust and throttle, in the bottom-right corner.
 - **Map:** a black-and-white Earth with your position instead of the engine dial.
+- **Booster view:** when you fly the booster after the stage separation, the stage-separation layout stays for a while and then the bar becomes the booster's own. The 3D dial plays the separation the other way round (the booster stays, the ship rises out) and then shows the booster alone. The T+ clock carries on when you switch vessels instead of starting again.
+- **Booster recording:** press **Record** on the Launch page while you fly the booster. On a later flight, with the option ticked, the booster's gauges play that recording from the separation on instead of the game's own numbers (off by default; the control panel says *REPLAY IN USE*, and the overlay can mark it too). **New, not yet tested in a long flight.**
+- **Hot staging:** the ship's lit engines show on its dial while it is still attached.
+- **Markers that get out of the way:** RE-ENTRY and LANDING BURN leave the timeline while your orbit stays clear of the atmosphere and come back when a deorbit puts the path into the air again.
+- **New control panel:** a black-and-white "Mission control" look with a side menu (Launch, Timeline, HUD, Data & Test, Looks). The old looks and your own background picture are still there under Looks.
+- **Stays in front of the game:** the overlay is put back on top every half second (the game has to be in windowed or borderless mode; no overlay can show over exclusive fullscreen).
 - **Honest data:** mock data is always labelled MOCK, and a lost or stale feed says so.
 
 ![Static-fire bar](docs/static-fire-bar.png)
@@ -94,20 +100,20 @@ The map assumes Earth: it plots your latitude and longitude on a map of Earth, s
 
 ## Using it
 
-The pill and bar share one overlay window, `KSP Starship Telemetry - Overlay`: it is as big as your screen, transparent where nothing is drawn, click-through and always on top by default. The control panel is a normal window. Settings are saved in `%APPDATA%\KSP Starship Telemetry\settings.json`; next to it the app writes `flap-trace.csv` and `booster-loss.csv`, records of what the game reported about the flaps and the lost booster.
+The pill and bar share one overlay window, `KSP Starship Telemetry - Overlay`: it is as big as your screen, transparent where nothing is drawn, click-through and always on top by default. The control panel is a normal window. Settings are saved in `%APPDATA%\KSP Starship Telemetry\settings.json`; next to it the app writes `flap-trace.csv` and `booster-loss.csv`, records of what the game reported about the flaps and the lost booster, and a `recordings` folder with your booster recordings.
 
 **In OBS:** add one Window Capture source, pick `KSP Starship Telemetry - Overlay`, set the Capture Method to "Windows 10 (1903 and up)" (the other methods show the transparent parts as black) and stretch it over the whole scene. For chroma key, pick the solid colour background: the whole overlay window gets that colour.
 
 | Where | What |
 |---|---|
-| HUD tab, "Bar for" (key `P`) | Switch between the flight bar and the small static-fire bar |
+| HUD page, "Bar for" (key `P`) | Switch between the flight bar and the small static-fire bar |
 | Key `M` | Map instead of the engine dial (flight bar) |
-| Mission & Timeline tab | Countdown, your events, the automatic markers (hide, rename or delete) |
-| Markers tab | Stamp a typed note at the current time |
-| HUD tab, Screen resolution | Scale the whole HUD to your monitor (automatic by default) |
-| HUD tab, side panels | Show or hide the bar's side panels; they sink away and rise again like the first rise |
-| HUD tab, flaps and re-entry glow | Turn the flaps' roll and yaw movement, and the re-entry glow, on or off |
-| HUD tab, 3D model | Use your own `.glb`, `.gltf`, `.obj` or `.stl` instead of the built-in Starship, and untick click-through to drag the windows |
+| Launch page | Mission label, countdown start, time warp, live readout, booster recording and replay |
+| Timeline page | Your events, the automatic markers (hide, rename or delete) and typed notes stamped at the current time |
+| HUD page, Screen resolution | Scale the whole HUD to your monitor (automatic by default) |
+| HUD page, side panels | Show or hide the bar's side panels; they sink away and rise again like the first rise |
+| HUD page, flaps and re-entry glow | Turn the flaps' roll and yaw movement, and the re-entry glow, on or off |
+| HUD page, 3D model | Use your own `.glb`, `.gltf`, `.obj` or `.stl` instead of the built-in Starship, and untick click-through to drag the windows |
 | Broadcast lock | Locks every setting during a stream |
 
 On the pad, KSP keeps mission time at 0, so the static-fire bar's clock runs on through T-0 instead of waiting for a launch.
@@ -116,13 +122,13 @@ On the pad, KSP keeps mission time at 0, so the static-fire bar's clock runs on 
 
 The timeline is not always exact to the game: its events are the times you plan, and only stage separation, maneuver nodes, re-entry and the landing burn are picked up from the game itself.
 It is most accurate when a flight repeats: if a script flies it (for example a kOS script) and the events happen at almost the same time every launch, set your events to those times and the timeline will line up closely.
-Editing your kOS script so its events land at fixed times makes it even more accurate. Change the times in the **Mission & Timeline** tab.
+Editing your kOS script so its events land at fixed times makes it even more accurate. Change the times on the **Timeline** page.
 
 ## Status
 
 The launch bar, static-fire bar, engine dial (all four cluster modes), stage-separation detection, 3D dial, map, timeline, maneuver-node prompt, RE-ENTRY and LANDING BURN markers, moving flaps and re-entry glow have all been used in real launches and a static fire.
 
-**Not made yet:** the booster's boostback burn and landing. After stage separation the overlay follows the ship, and shows the booster's speed and altitude for as long as the game still reports it (then NO DATA).
+**New in v1.2-beta and not yet proven in many flights:** the booster view, the booster recording and replay, the hot-staging engines on the ship's dial, and the markers that leave the timeline in a clear orbit. **Not made yet:** the booster's own boostback and landing gauges beyond its speed, altitude and engines; the recording only covers the booster, not the ship.
 
 Other scripts: `run_bar_demo.py` and `run_pill_demo.py` (the bar or pill alone with mock data), `run_live.py` (a bare runner without the panel), `render_previews.py` and `render_sequences.py` (pictures of every view), and `python -m pytest` for the tests.
 
